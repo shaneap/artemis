@@ -1,0 +1,13 @@
+.DS_Store
+.Rhistory
+.Rproj.user/
+
+# Data exports (not tracked — regenerate/download locally)
+*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
