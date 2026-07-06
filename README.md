@@ -24,9 +24,22 @@ Order export CSVs (`OrderDetails_*.csv`) are not tracked in this repo — drop y
 
 ## Seating sections
 
-`Table` codes map to four seating areas: `B#` (Bar, 12 single-guest stools), `BD#` (Black Duck), `E#` (Evangeline), `O#` (Open Lounge). Capacity per table is defined in the `TABLE_CAPACITY` mapping in the notebook.
+`Table` codes map to four seating areas: `B#` (Bar, 12 single-guest stools), `BD#` (Black Duck), `E#` (Evangeline), `O#` (Open Lounge). Each table's confirmed seat range is defined in the `TABLE_CAPACITY_RANGE` mapping in the notebook (`Capacity_Min`/`Capacity_Max` columns):
 
-### Open questions / data clarifications needed
+- **Bar**: `B1`-`B12` seat 1 each. `B13`/`B14` are standing-wait placeholders (used when a guest is served while waiting for an actual bar stool to free up), not physical seats — excluded from capacity-based analysis but still counted in the Bar section's revenue analysis.
+- **Black Duck** (only `BD1`-`BD3` in use — `BD5` is retired, excluded like `B13`/`B14`): `BD1` seats 2, `BD2` seats 2-3, `BD3` seats 3-4.
+- **Evangeline**: `E1`/`E2` seat 2 each, `E3` flexes 5-6.
+- **Open Lounge**: `O1`, `O8`, `O10` seat 3; the rest seat 2.
 
-- **Bar seats `B13`/`B14`** are standing-wait placeholders (used when a guest is served while waiting for an actual bar stool to free up), not physical seats — confirmed, so they're intentionally excluded from capacity-based analysis but still counted in the Bar section's revenue analysis.
-- **Black Duck 4-seat vs 5-seat assignment** across `BD1`–`BD3` (the only tables currently in use — `BD5` is retired) isn't confirmed yet. The notebook infers capacity from each table's most frequent (`mode`) `# of Guests` rather than the max, since parties routinely get combined across tables (e.g. BD3/BD5 have recorded parties up to 15) which makes max useless as a capacity signal. Once the real floor plan is known, fill in `MANUAL_CAPACITY_OVERRIDES` in the capacity-mapping cell (e.g. `{'BD1': 4, 'BD3': 5}`) to override the estimate without changing any other code.
+### Open Lounge table combinations
+
+Four Open Lounge table pairs have a confirmed combined capacity (no seating-option distinction) for when a party is seated across both tables at once:
+
+| Combo | Min | Max |
+| --- | --- | --- |
+| `O1`+`O2` | 4 | 5 |
+| `O4`+`O5` | 3 | 4 |
+| `O7`+`O8` | 4 | 5 |
+| `O9`+`O10` | 3 | 4 |
+
+These aren't modeled in the notebook's `Capacity_Min`/`Capacity_Max` columns: the raw `Table` field never records a combined code — each row is always a single table (e.g. `O1`), so there's no signal in the order data for when two tables were actually pushed together for one party. This is also why the overbooking sanity-check in the notebook flags a meaningful number of Open Lounge (and Black Duck) rows — those are likely legitimate combined-table parties, not data errors.
