@@ -2,6 +2,23 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-04
+
+### Added
+- **`artemis.py`** — the loading/cleaning pipeline moved out of the notebook into a shared module, so the notebook and any report generator use one copy. Cleaning rules are unchanged; `CAPACITY_RANGES` and `get_section` now live there as the single source of truth.
+- **Time layer** (`add_service_day`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`) — reconstructs which tables were occupied in each 15-minute slot and how long each table sat empty between parties. Everything the per-order metrics structurally could not see: on 2026-02-13, the highest-revenue Friday in the dataset, BD3 sat empty for 296 consecutive minutes between two otherwise healthy-looking checks.
+- **`Order_Type`** (`Seated` / `Event-Catering` / `To-Go`) — see Fixed below.
+- **`verify_artemis.py`** — runnable invariant checks (row count, service-day boundary, occupancy bounds, turn-gap reconciliation).
+- Full timestamps preserved as `Opened_DT` / `Closed_DT` / `Paid_DT`. The display cells overwrite `Opened`/`Closed` with time-only strings, which previously destroyed the date and made any time-of-night analysis impossible.
+
+### Fixed
+- **Orders were dated by calendar date, not by service night.** Friday business running past midnight was filed under Saturday. Reattributing it moved 86 orders onto Friday and 82 off Sunday, and explained the 21 "Monday" orders at a bar that closes Mondays — 18 of the 19 that remain have no table at all (catering and pickups rung in on a closed day; exactly one seated order in six months). **This changes previously-reported day-of-week revenue numbers.**
+- **~$104K of untabled revenue was disappearing silently** through the `Duration >= 15` floor — 10.7% of all revenue in event/catering bookings plus 2.4% in to-go. Now classified via `Order_Type` and reported rather than dropped. Still excluded from per-seat VPCPM/TPCPM, which is correct: nobody was seated.
+- Nine event/catering rows have no duration at all; they now get a null `Paid_DT` instead of triggering a pandas NaT-cast warning.
+
+### Verified
+- The shrinkage-weighted section summary is **numerically identical** before and after the refactor, as are the LOOCV-selected `k` values, TPCPM-by-section, combined-booking, and Bar reference tables. The only output changes are row-index renumbering (`reset_index`) and the two cells whose content was intentionally replaced.
+
 ## 2026-07-28
 
 ### Fixed
