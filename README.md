@@ -1,17 +1,38 @@
 # Artemis
 
-Exploratory analysis of restaurant order data — looking at how table value scales with party size, to inform seating and table-management decisions.
+Exploratory analysis of restaurant order data — looking at how table value scales with party size, and at how tables are used across a night, to inform seating and table-management decisions.
 
-The core notebook ([test.ipynb](test.ipynb)) loads per-order exports (guest count, amount, open/close times), derives table duration and two revenue-rate metrics, and visualizes how they trend across party sizes and seating sections.
+The shared pipeline lives in [artemis.py](artemis.py); the notebook ([test.ipynb](test.ipynb)) imports it. There are two layers:
+
+- **Per-order layer** — loads per-order exports (guest count, amount, open/close times), derives table duration and two revenue-rate metrics (VPCPM/TPCPM), and visualizes how they trend across party sizes and seating sections.
+- **Time layer** — reconstructs what the floor actually looked like: which tables were occupied in each 15-minute slot, and how long each table sat empty between parties. The per-order layer examines one order at a time and so cannot see a table sitting idle between two healthy-looking checks.
 
 ## Status
 
 **Active / exploratory.** The core pipeline (load → clean → section/capacity mapping → VPCPM/TPCPM → shrinkage-weighted section summaries) runs end to end with no known correctness bugs. See [CHANGELOG.md](CHANGELOG.md) for what's been fixed and when.
 
+Run `python verify_artemis.py` to check the pipeline's invariants (row counts, service-day boundary, occupancy bounds, turn-gap reconciliation).
+
 **Known open issues (not yet resolved):**
 - **Multi-table/combined bookings are unrecoverable from Toast exports** — see [Combined bookings & the capacity mismatch](#combined-bookings--the-capacity-mismatch) below. Current mitigation is a flag (`Likely_Combined_Booking`) that splits these rows into a descriptive-only summary; this is a backburner item pending a POS-side or process-level fix, not something fixable in the notebook alone.
 - **95% confidence intervals are paused** pending a proper significance-testing pass on the shrinkage-weighted estimates.
 - **The LOOCV `k`-grid is coarse** (`[1, 2, 3, 5, 8, 12, 20, 30, 50, 75, 100, 150, 200]`) — good enough so far (selected values haven't landed on a grid boundary), but a finer or continuous search would be more rigorous.
+
+## The time layer
+
+Three concepts, all derived from `Opened` + `Duration` — no new data required.
+
+- **Service day** — a Friday that runs to 1:30am counts as Friday. Dating orders by calendar date files late-night revenue under the following day; Friday is still at ~45% table occupancy at midnight, so this materially shifted the day-of-week picture (Friday +86 orders, Sunday −82). It is also why a bar closed on Mondays appeared to have Monday orders. The cutoff is 4am (`SERVICE_DAY_CUTOFF_HOUR`), verified to fall in genuinely dead time — no order in this dataset opens between 3am and 5am.
+- **Turn gap** — the dead time between one party paying and the next being seated at that table, computed within a single service night. Toast records when a party *paid*, not when the table was *cleared*, so a gap conflates guests lingering after settling up, bussing speed, and nobody waiting to be seated. Those have different fixes and this export cannot separate them.
+- **Occupancy timeline** — one row per (night, table, 15-minute slot), with each order's revenue spread evenly across the slots it occupied. This is what utilization and revenue-by-time-of-night are computed from.
+
+Two data artifacts are handled explicitly rather than silently: gaps are never computed across two nights, and ~2% of consecutive same-table pairs *overlap* (the next party appears seated before the previous paid — the combined-check artifact). Overlapping pairs get a null gap and are counted in `Turn_Overlap` so the rate stays visible.
+
+## Order types
+
+Orders are labelled `Seated` / `Event-Catering` / `To-Go`. Previously everything without a table fell through the `Duration >= 15` floor and disappeared — about **$104K** of real revenue (10.7% event/catering, 2.4% to-go), silently. These aren't seated tables so they still don't belong in per-seat metrics, but they're no longer invisible.
+
+The split is by check size (`EVENT_AMOUNT_THRESHOLD`, currently $400), not time of day: untabled orders occur across the whole operating day, but a $2,200 untabled check is a catering booking whatever hour it was rung in. Durations on untabled rows are meaningless — they range up to 18 days — because nobody was sitting anywhere.
 
 ## Methodology
 
