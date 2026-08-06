@@ -1,0 +1,581 @@
+<title>Artemis — Table & Revenue Analysis, January–July 2026</title>
+<style>
+  :root {
+    --paper:      #FBFAF7;
+    --ink:        #1B2A33;
+    --muted:      #5E6B73;
+    --rule:       #DFDCD5;
+    --rule-soft:  #EDEBE5;
+    --accent:     #8A6A3B;
+    --accent-dim: #C4B392;
+    --good:       #3F6B4F;
+    --warn:       #9A5B2E;
+
+    --serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', ui-serif, serif;
+    --sans:  ui-sans-serif, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono:  ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:      #141C21;
+      --ink:        #E4E7E5;
+      --muted:      #97A3A9;
+      --rule:       #2C383F;
+      --rule-soft:  #212C32;
+      --accent:     #C9A468;
+      --accent-dim: #6E5C3D;
+      --good:       #7FB08D;
+      --warn:       #D08A50;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:#141C21; --ink:#E4E7E5; --muted:#97A3A9; --rule:#2C383F;
+    --rule-soft:#212C32; --accent:#C9A468; --accent-dim:#6E5C3D;
+    --good:#7FB08D; --warn:#D08A50;
+  }
+  :root[data-theme="light"] {
+    --paper:#FBFAF7; --ink:#1B2A33; --muted:#5E6B73; --rule:#DFDCD5;
+    --rule-soft:#EDEBE5; --accent:#8A6A3B; --accent-dim:#C4B392;
+    --good:#3F6B4F; --warn:#9A5B2E;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: 4rem 1.5rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2.75rem;
+  }
+
+  /* ---- masthead ---- */
+  .masthead { display: flex; flex-direction: column; gap: .5rem; }
+  .venue {
+    font-family: var(--sans);
+    font-size: .72rem;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 {
+    font-size: 2rem;
+    line-height: 1.2;
+    font-weight: 400;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .meta {
+    font-family: var(--sans);
+    font-size: .82rem;
+    color: var(--muted);
+    line-height: 1.7;
+    border-top: 1px solid var(--rule);
+    padding-top: .75rem;
+    margin-top: .5rem;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  /* ---- sections ---- */
+  section { display: flex; flex-direction: column; gap: 1rem; }
+  section > h2 {
+    font-family: var(--sans);
+    font-size: .74rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    margin: 0;
+    padding-bottom: .6rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-size: 1.12rem;
+    font-weight: 400;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { margin: 0; }
+  .lede { font-size: 1.18rem; line-height: 1.55; }
+  .muted { color: var(--muted); }
+
+  /* ---- the owner's numbered questions ---- */
+  .qa { display: flex; flex-direction: column; gap: 2rem; }
+  .q {
+    display: grid;
+    grid-template-columns: 1.6rem 1fr;
+    gap: .35rem .9rem;
+    align-items: baseline;
+  }
+  .q .num {
+    font-family: var(--mono);
+    font-size: .82rem;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .q .body { display: flex; flex-direction: column; gap: .7rem; grid-column: 2; }
+  .q .ask {
+    font-style: italic;
+    color: var(--muted);
+    font-size: .97rem;
+  }
+  .verdict {
+    font-family: var(--sans);
+    font-size: .7rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    display: inline-block;
+  }
+  .verdict.yes  { color: var(--good); }
+  .verdict.no   { color: var(--warn); }
+  .verdict.wip  { color: var(--muted); }
+
+  /* ---- tables ---- */
+  .scroll { overflow-x: auto; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--sans);
+    font-size: .86rem;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--sans);
+    font-size: .78rem;
+    color: var(--muted);
+    padding-bottom: .5rem;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: .72rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--rule);
+    padding: 0 .7rem .4rem 0;
+    white-space: nowrap;
+  }
+  td {
+    padding: .48rem .7rem .48rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: baseline;
+  }
+  tr:last-child td { border-bottom: none; }
+  .num-cell { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .em { color: var(--ink); font-weight: 600; }
+
+  /* bar drawn as a plain width, not a chart widget */
+  .bar-cell { width: 42%; min-width: 7rem; }
+  .bar {
+    display: block;
+    height: .5rem;
+    background: var(--accent-dim);
+    border-radius: 1px;
+  }
+  .bar.strong { background: var(--accent); }
+
+  /* ---- callout ---- */
+  .note {
+    border-left: 2px solid var(--accent);
+    padding: .1rem 0 .1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+  }
+
+  ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .45rem; }
+  li { padding-left: .2rem; }
+
+  .fine {
+    font-family: var(--sans);
+    font-size: .8rem;
+    line-height: 1.65;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+  }
+  .fine b { color: var(--ink); font-weight: 600; }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 0;
+  }
+
+  @media (max-width: 34rem) {
+    body { font-size: 16px; }
+    .sheet { padding: 2.5rem 1.15rem 4rem; }
+    h1 { font-size: 1.6rem; }
+    .bar-cell { display: none; }
+  }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <div class="venue">Artemis &middot; Ronkonkoma, NY</div>
+    <h1>Where the money actually is</h1>
+    <p class="meta">
+      Analysis of point-of-sale data, <b>15 January &ndash; 15 July 2026</b><br>
+      6,233 orders across 153 trading nights &middot; $797,498 in recorded sales
+    </p>
+  </header>
+
+  <section>
+    <h2>The short version</h2>
+    <p class="lede">
+      Most of what we've been asking about assumes the room is full and needs managing
+      better. It isn't. Across six months the dining room was <b>never once</b> at
+      capacity, and sat a little under a third full on a typical night. Almost every
+      question below ends in the same place: the constraint is filling seats, not
+      turning them faster or arranging them differently.
+    </p>
+    <p>
+      That's worth knowing before spending money or staff attention on the wrong problem.
+      Two of the ideas we discussed &mdash; tightening turnaround between parties, and being
+      stricter about which party sits at which table &mdash; I tested properly, and both come
+      out worth very little. The detail is below.
+    </p>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Your three questions</h2>
+    <div class="qa">
+
+      <div class="q">
+        <div class="num">1</div>
+        <div class="body">
+          <h3>Seating parties back to back</h3>
+          <p class="ask">"How to seat parties back to back if party is 2/3 guests"</p>
+          <p><span class="verdict no">Not worth chasing</span></p>
+          <p>
+            A table sits empty about 30 minutes between one party paying and the next
+            sitting down. That sounds like waste, so I checked whether it actually is,
+            by measuring the gap against how busy the room was at that exact moment.
+          </p>
+          <div class="scroll">
+            <table>
+              <caption>Median minutes a table sat empty, by how full the room was</caption>
+              <thead>
+                <tr><th>Room was</th><th>Gap</th><th class="bar-cell"></th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Under &frac14; full</td><td class="num-cell">65 min</td><td class="bar-cell"><span class="bar" style="width:100%"></span></td></tr>
+                <tr><td>&frac14; to &frac12;</td><td class="num-cell">33 min</td><td class="bar-cell"><span class="bar" style="width:51%"></span></td></tr>
+                <tr><td>&frac12; to &frac34;</td><td class="num-cell">27 min</td><td class="bar-cell"><span class="bar" style="width:42%"></span></td></tr>
+                <tr><td>Over &frac34; full</td><td class="num-cell em">24 min</td><td class="bar-cell"><span class="bar strong" style="width:37%"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            When the room is busy the staff already turn a table in 24 minutes. The long
+            gaps happen on quiet nights &mdash; which means they're not a bussing problem, they're
+            an empty-room problem. A table that turns faster only earns more if somebody is
+            waiting for it.
+          </p>
+          <p>
+            Getting every turn down to that 24-minute standard is worth roughly
+            <b>$9,000 a year</b>, and only in the rare moments the room is nearly full. Done
+            the naive way &mdash; assuming a party is always waiting &mdash; the same sum comes out at
+            $156,000, which is where this kind of number usually gets quoted from. I don't
+            think it's real.
+          </p>
+        </div>
+      </div>
+
+      <div class="q">
+        <div class="num">2</div>
+        <div class="body">
+          <h3>Revenue by time of day</h3>
+          <p class="ask">"Revenue by time (depending on opening)"</p>
+          <p><span class="verdict wip">Part done &mdash; the piece I'd continue with</span></p>
+          <p>
+            I can now measure how full the room is at any point in any night. The pattern by
+            day is stark, and it's where I think the remaining opportunity sits.
+          </p>
+          <div class="scroll">
+            <table>
+              <caption>Share of table time actually sold, and what went unsold</caption>
+              <thead>
+                <tr><th>Night</th><th>Sold</th><th class="bar-cell"></th><th>Unsold per night</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Tuesday</td><td class="num-cell">16%</td><td class="bar-cell"><span class="bar" style="width:37%"></span></td><td class="num-cell">107 table-hours</td></tr>
+                <tr><td>Wednesday</td><td class="num-cell">19%</td><td class="bar-cell"><span class="bar" style="width:44%"></span></td><td class="num-cell">95 table-hours</td></tr>
+                <tr><td>Sunday</td><td class="num-cell">20%</td><td class="bar-cell"><span class="bar" style="width:46%"></span></td><td class="num-cell">90 table-hours</td></tr>
+                <tr><td>Thursday</td><td class="num-cell">26%</td><td class="bar-cell"><span class="bar" style="width:60%"></span></td><td class="num-cell">90 table-hours</td></tr>
+                <tr><td>Friday</td><td class="num-cell">42%</td><td class="bar-cell"><span class="bar strong" style="width:97%"></span></td><td class="num-cell">88 table-hours</td></tr>
+                <tr><td>Saturday</td><td class="num-cell em">43%</td><td class="bar-cell"><span class="bar strong" style="width:100%"></span></td><td class="num-cell">89 table-hours</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Even the best night sells under half its table time. To turn this into an actual
+            recommendation on opening hours I need one number from you: roughly what it costs
+            to keep the doors open for an hour, staff included. With that I can say which
+            hours pay for themselves and which don't.
+          </p>
+        </div>
+      </div>
+
+      <div class="q">
+        <div class="num">3</div>
+        <div class="body">
+          <h3>Value per person per 15 minutes</h3>
+          <p class="ask">"Value per person per 15 mins"</p>
+          <p><span class="verdict yes">Done</span></p>
+          <p>
+            A guest is worth roughly <b>$6 to $8</b> per 15 minutes at the table. But the more
+            useful version is per table rather than per guest, because a table is the thing
+            you're actually allocating:
+          </p>
+          <div class="scroll">
+            <table>
+              <caption>What a table earns per hour, by the size of the party sitting at it</caption>
+              <thead>
+                <tr><th>Party</th><th>Per table-hour</th><th class="bar-cell"></th><th>Typical stay</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>2 guests</td><td class="num-cell">$61</td><td class="bar-cell"><span class="bar" style="width:47%"></span></td><td class="num-cell">87 min</td></tr>
+                <tr><td>3 guests</td><td class="num-cell">$72</td><td class="bar-cell"><span class="bar" style="width:55%"></span></td><td class="num-cell">94 min</td></tr>
+                <tr><td>4 guests</td><td class="num-cell">$95</td><td class="bar-cell"><span class="bar" style="width:73%"></span></td><td class="num-cell">100 min</td></tr>
+                <tr><td>6 guests</td><td class="num-cell em">$130</td><td class="bar-cell"><span class="bar strong" style="width:100%"></span></td><td class="num-cell">116 min</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            A six-top earns more than double a two-top per hour of table time, and only stays
+            about half an hour longer. Larger parties are the best business in the building
+            &mdash; they're 16% of seatings and <b>30% of table revenue</b>.
+          </p>
+          <p class="muted">
+            The catch: this tells you which parties to <em>want</em>, not how to seat them
+            differently. With the room this empty there's nothing to reallocate &mdash; a two-top
+            at a four-top displaced a larger party on about 1% of seatings. It's a marketing
+            fact, not a floor-management one.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>The other questions from your notes</h2>
+
+    <div class="qa">
+      <div class="q">
+        <div class="num">&mdash;</div>
+        <div class="body">
+          <h3>Are the private-event rates priced right?</h3>
+          <p class="ask">"$1200 for BD 3 hour reservation / $900 for E 3 hour reservation &mdash; are these priced well?"</p>
+          <p><span class="verdict yes">Yes &mdash; both, comfortably</span></p>
+          <p>
+            An event sells a section for three hours, so the fair comparison is what that
+            section earns in its <em>best</em> three hours of ordinary trade &mdash; that's what the
+            booking displaces.
+          </p>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr><th>Section</th><th>Event rate</th><th>Typical best 3 hours</th><th>Beats</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Black Duck</td><td class="num-cell em">$1,200</td><td class="num-cell">$616</td><td class="num-cell">99% of nights</td></tr>
+                <tr><td>Evangeline</td><td class="num-cell em">$900</td><td class="num-cell">$581</td><td class="num-cell">99% of nights</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p><b>Two things worth acting on.</b></p>
+            <p>
+              <b>Midweek events are far more valuable than weekend ones.</b> Booking Black Duck
+              on a Tuesday nets about <b>$830</b> more than the space would otherwise earn; on
+              a Saturday it's about <b>$458</b>. Discounting midweek to fill the calendar costs
+              you almost nothing and is the easiest revenue on this page.
+            </p>
+            <p>
+              <b>The weekend rate is slightly low.</b> Black Duck's best-ever three hours came
+              to $1,440 &mdash; above the $1,200 rate. On a peak Friday or Saturday you're
+              marginally underpricing the room.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="q">
+        <div class="num">&mdash;</div>
+        <div class="body">
+          <h3>Should E3 seat a party of four?</h3>
+          <p class="ask">"Should E3 seat 4 when there is no party of 5/6?"</p>
+          <p><span class="verdict yes">Yes &mdash; seat them</span></p>
+          <p>
+            The worry is holding the big table for a large party that never shows. I measured
+            how often that actually bites: a party of five or six turned up to find E3 occupied
+            by a smaller group about <b>once every five nights</b> &mdash; and every one of those
+            parties was still seated, because both Black Duck banquettes take that size too.
+            Holding E3 empty costs more than it protects.
+          </p>
+        </div>
+      </div>
+
+      <div class="q">
+        <div class="num">&mdash;</div>
+        <div class="body">
+          <h3>Should BD1 &amp; BD2 seat a party of five?</h3>
+          <p class="ask">"Same issue with BD1&amp;2. Should they seat 5s (3+2)?"</p>
+          <p><span class="verdict yes">Yes &mdash; and you already do</span></p>
+          <p>
+            BD1 and BD2 are two halves of a single six-seat banquette, so a party of five fits
+            without pushing anything together. It's already happening &mdash; 30 parties of exactly
+            five over the six months, earning <b>$115 per table-hour</b>, well above a two-top.
+            Both Black Duck banquettes sit empty through roughly half of peak hours, so there's
+            no scarcity to ration here.
+          </p>
+        </div>
+      </div>
+
+      <div class="q">
+        <div class="num">&mdash;</div>
+        <div class="body">
+          <h3>Reservation lengths</h3>
+          <p class="ask">"Bigger tables have longer reservation&hellip; need to weight larger parties higher?"</p>
+          <p><span class="verdict wip">Already handled &mdash; and the limits aren't binding</span></p>
+          <p>
+            Between 43% and 56% of parties &mdash; at every size &mdash; stay past their allotted time.
+            But the room was near-full during only <b>5%</b> of those overstays, so enforcing
+            the limit would recover almost nothing. On weighting bigger parties more heavily:
+            the per-table-hour figures above already do exactly that, since they divide what a
+            party spends by how long they occupy the table.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Two things you didn't ask about</h2>
+
+    <h3>The floor plan was recorded wrong, and it was distorting everything</h3>
+    <p>
+      Toast files every check against a single table code, but Black Duck and Evangeline are
+      banquettes split across two codes each, and most Open Lounge tables pair up. So a party
+      taking a whole banquette looked, in the data, like six people crammed onto a two-top.
+      Roughly <b>half of all bookings</b> were being flagged as impossible.
+    </p>
+    <div class="scroll">
+      <table>
+        <caption>Bookings that looked over capacity, before and after modelling the real furniture</caption>
+        <thead>
+          <tr><th>Section</th><th>Before</th><th>After</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Black Duck</td><td class="num-cell">49%</td><td class="num-cell em">9%</td></tr>
+          <tr><td>Evangeline</td><td class="num-cell">27%</td><td class="num-cell em">7%</td></tr>
+          <tr><td>Open Lounge</td><td class="num-cell">27%</td><td class="num-cell em">1%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      I confirmed the real layout against Tock and then against the sales data independently &mdash;
+      when one half of a banquette holds a large party, the other half is empty 92&ndash;100% of the
+      time, exactly as it should be if they're one piece of furniture. Seat totals now come out
+      at 22, 14, 10 and 12, matching your own figures exactly. What's left flagged is about 100
+      genuinely large bookings that really did span several tables.
+    </p>
+
+    <h3 style="margin-top:1.1rem">Guest numbers are falling, and it isn't about party size</h3>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>Month</th><th>Parties/night</th><th>Avg party</th><th>Revenue/night</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>February</td><td class="num-cell">27.9</td><td class="num-cell">3.1</td><td class="num-cell">$3,995</td></tr>
+          <tr><td>April</td><td class="num-cell">22.2</td><td class="num-cell">3.3</td><td class="num-cell">$3,143</td></tr>
+          <tr><td>June</td><td class="num-cell">18.7</td><td class="num-cell">3.1</td><td class="num-cell">$2,551</td></tr>
+          <tr><td>July <span class="muted">(part)</span></td><td class="num-cell em">17.8</td><td class="num-cell">3.4</td><td class="num-cell em">$2,615</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Fewer groups are coming in; the ones that do are the same size as ever. That's a footfall
+      question, not a menu or seating one. <b>Six months isn't enough to separate this from
+      normal summer seasonality</b> &mdash; I'd want a full year before drawing a conclusion, and I'd
+      rather flag it now than have it arrive as a surprise.
+    </p>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>What would help next</h2>
+    <p>
+      Every answer above points the same direction: the room isn't full, so the question worth
+      solving is what brings people in and when. Toast can't answer that on its own &mdash; it only
+      records the business we <em>served</em>, never the business we turned away or never got.
+    </p>
+    <p>
+      <b>Access to the Tock booking data would close that gap.</b> Specifically: when a booking
+      was made, when the party was actually seated, party size, and whether it was kept,
+      cancelled or a no-show. That tells us how far ahead people book, how many don't turn up,
+      and which nights genuinely run out of room &mdash; none of which is visible today.
+    </p>
+    <p>
+      With that plus an hourly running-cost figure, I can finish the opening-hours question
+      properly and put numbers on which nights are worth staffing.
+    </p>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>How this was put together</h2>
+    <div class="fine">
+      <p>
+        <b>Source.</b> Toast order exports covering 15 January to 15 July 2026 &mdash; 6,233 orders
+        after removing duplicate export rows, a retired table, and one order recording 101
+        guests at a bar stool.
+      </p>
+      <p>
+        <b>Table time</b> uses Toast's own opened-to-paid duration rather than the difference
+        between opened and closed timestamps, which is inflated by end-of-night batch closeouts.
+        Nights are counted as trading nights, so a Friday running to 1:30am counts entirely as
+        Friday &mdash; previously that late trade was being credited to Saturday.
+      </p>
+      <p>
+        <b>Not included in table figures:</b> $85,015 of catering and private-event orders and
+        $19,173 of takeaway. These have no table and no meaningful sitting time, so they'd
+        distort any per-table number &mdash; but they're real revenue and are tracked separately.
+      </p>
+      <p>
+        <b>Known limits.</b> Toast records when a party paid, not when the table was cleared, so
+        the gap between parties blends guests lingering, staff resetting, and nobody waiting.
+        The event-pricing comparison treats the quoted rate as the whole value of the booking &mdash;
+        if events also drive bar spend, they're worth more than shown. And the six-month window
+        can't distinguish a seasonal dip from a real decline.
+      </p>
+    </div>
+  </section>
+
+</div>
