@@ -39,7 +39,7 @@ The turn-gap work was set up to test whether idle time between parties is a reco
 
 Party-size steering fails the same test — only 1.3% of seatings put a small party at a bigger table while the room was busy enough for it to matter.
 
-What does survive is a **floor-plan** finding: parties of 5+ are 15.6% of seatings and **30% of section revenue**, but exactly one table (`E3`) seats one without pushing furniture together, so three quarters of that segment is accommodated ad hoc. This is also the root cause of the combined-booking problem below.
+Large parties are the most valuable per hour of table time — 15.6% of seatings, **30% of section revenue** — but there is no layout problem to solve: **81% of parties of 5+ fit entirely within a single physical unit**, and 30 of the 46 reservation seats sit in units that take five or more. (An earlier version of this README claimed `E3` was the only such table; that was an artifact of the pre-banquette capacity model and is retracted.)
 
 Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Six months cannot separate that from seasonality.
 
@@ -76,32 +76,47 @@ jupyter notebook test.ipynb
 
 Order export CSVs (`OrderDetails_*.csv`) are not tracked in this repo — drop your own exports in the project root before running the notebook. Expected columns include `Amount`, `# of Guests`, `Opened`, `Closed`, `Duration (Opened to Paid)`, and `Table`.
 
-## Seating sections
+## Seating units
 
-`Table` codes map to four seating areas: `B#` (Bar, 12 single-guest stools), `BD#` (Black Duck), `E#` (Evangeline), `O#` (Open Lounge). Each table's confirmed seat range is defined in the `CAPACITY_RANGES` mapping in the notebook (`Capacity_Min`/`Capacity_Max` columns):
+**The POS table code is not the physical unit.** Black Duck and Evangeline are banquettes subdivided into two codes each, and most Open Lounge tables pair up. Toast records a whole-banquette booking against one of its codes, so comparing guest count to that code's own capacity makes an ordinary booking look like an overflow. `SEATING_UNITS` in [artemis.py](artemis.py) models the real furniture:
 
-- **Bar**: `B1`-`B12` seat 1 each. `B13`/`B14` are standing-wait placeholders (used when a guest is served while waiting for an actual bar stool to free up), not physical seats — excluded from capacity-based analysis but still counted in the Bar section's revenue analysis.
-- **Black Duck**: `BD1` seats 2, `BD2` seats 2-3, `BD3` seats 3-4, `BD5` seats 2. `BD5` is **active**, not retired — it carries a comparable order volume to `BD2`/`BD3` in this data. `BD4` *is* retired; its historical orders (present in exports spanning when it was still active) are excluded entirely from the notebook, not just from capacity checks.
-- **Evangeline**: `E1`/`E2` seat 2 each, `E3` flexes 5-6.
-- **Open Lounge**: `O1` and `O8` seat 3; every other table, including `O10`, seats 2.
-
-### Open Lounge table combinations
-
-Four Open Lounge table pairs have a confirmed combined capacity (no seating-option distinction) for when a party is seated across both tables at once:
-
-| Combo | Min | Max |
+| Unit | POS codes | Seats |
 | --- | --- | --- |
-| `O1`+`O2` | 4 | 5 |
-| `O4`+`O5` | 3 | 4 |
-| `O7`+`O8` | 4 | 5 |
-| `O9`+`O10` | 3 | 4 |
+| Black Duck large banquette | `BD3` + `BD5` | 8 |
+| Black Duck small banquette | `BD1` + `BD2` | 6 |
+| Evangeline pair | `E1` + `E2` | 4 |
+| Evangeline large | `E3` | 5-6 |
+| `O1`+`O2` | combo pair | 5 |
+| `O4`+`O5` | combo pair | 4 |
+| `O7`+`O8` | combo pair | 5 |
+| `O9`+`O10` | combo pair | 4 |
+| `O3`, `O6` | never combine | 2 each |
+| Bar | `B1`-`B12` | 1 each |
 
-These aren't modeled in the notebook's `Capacity_Min`/`Capacity_Max` columns: the raw `Table` field never records a combined code — each row is always a single table (e.g. `O1`), so there's no signal in the order data for when two tables were actually pushed together for one party.
+Section totals: **Open Lounge 22, Black Duck 14, Evangeline 10, Bar 12** — matching the operator's own figures exactly.
 
-## Combined bookings & the capacity mismatch
+The pairings are confirmed against Tock and independently against the order data: when a code hosts a party too large for its own half, its partner is empty 92-100% of the time, versus 20-66% for small parties. Non-adjacent control pairs show no such effect. `verify_artemis.py` enforces this as an invariant.
 
-**This turns out to be a much bigger issue than a few edge cases.** Now that capacities are the real confirmed seat counts (not the old mode-inferred estimates), the overbooking sanity-check flags roughly **half of all rows** as exceeding their table's max capacity — Bar 80%, Black Duck 60%, Evangeline 27%, Open Lounge 27%. These have two different causes: for Black Duck/Evangeline/Open Lounge, the excess-guest distribution (guests minus capacity) is wide with a long tail — consistent with a party being seated across multiple physical tables for a large booking or private event, with the whole check landing on one anchor table. For Bar, 79% of overbooked rows are exactly one guest over a 1-seat stool — a routine 2-top, not an event.
+`Capacity_Min`/`Capacity_Max` remain per-code as the *solo* range — what a code seats when its partner is in separate use. Notes:
 
-**Root cause (confirmed against Toast's own API docs): Toast's data model ties one order to exactly one table.** A check has a single table reference, and "combining checks" moves items from multiple checks onto one destination check with no record of which other tables fed into it. This isn't a report/export setting — it's a platform limitation, and it means the true table count behind a multi-table booking is unrecoverable from historical exports after the fact.
+- **Bar**: `B13`/`B14` are standing-wait placeholders (used when a guest is served while waiting for a stool to free up), not physical seats — no capacity, excluded from capacity checks but still counted in Bar revenue.
+- **Black Duck**: `BD5` is **active**, not retired. `BD4` *is* retired; its historical orders are excluded entirely from the notebook.
+- **Open Lounge**: only `O1` and `O8` seat 3. `O10` seats 2 — it reads as a 3-seater in some notes, but Tock says 2 and the data agrees (46% two-guest, 44% four-guest, only 9% threes — the signature of a 2-top that becomes a 4-top with `O9`).
 
-**Current mitigation (not a fix): a `Likely_Combined_Booking` flag** (`# of Guests > Capacity_Max`) in the notebook splits these rows out of the single-table, per-seat VPCPM/TPCPM analysis into their own descriptive-only summary, so they don't dilute the section/party-size recommendations. This is a known open issue on the backburner, not resolved — a real fix would need either a Toast floor-plan combo-table configuration for recurring combos (like the four Open Lounge pairs above) or a staff tagging convention at merge time, neither of which is in place yet.
+## Combined bookings — mostly resolved
+
+**This was the repo's largest open issue.** The overbooking check previously flagged roughly half of all rows. The cause was measurement, not operations: guest counts were being compared against half a banquette. Against whole-unit capacity:
+
+| Section | Exceeds solo code | Exceeds whole unit |
+| --- | --- | --- |
+| Black Duck | 49% | **9%** |
+| Evangeline | 27% | **7%** |
+| Open Lounge | 27% | **1%** |
+
+(Earlier README versions quoted Black Duck at 60%, computed when `BD1` and `BD5` were modelled as 2-seaters.)
+
+**What remains is genuine.** About 100 reservation-section rows — median 8 guests, up to 18, ~$41K — really do span multiple units. **Root cause, confirmed against Toast's API docs: Toast ties one order to exactly one table.** A check has a single table reference, and combining checks moves items onto one destination check with no record of which others fed in. That is a platform limitation, not an export setting, so the true unit count behind those bookings is unrecoverable after the fact.
+
+`Likely_Combined_Booking` (now `# of Guests > Unit_Capacity`) splits them into a descriptive-only summary so the revenue stays visible without diluting per-seat metrics. The old per-code definition is retained as `Exceeds_Solo_Capacity` so the difference stays measurable. The remaining fix is unchanged in kind but far smaller in scope: a Toast floor-plan combo configuration, or a staff tagging convention at merge time.
+
+**The Bar is a separate case** and still flags ~78% of its rows — a 2-guest check on a 1-seat stool is a routine 2-top, not a multi-unit booking. It is excluded from the combined-booking summary for that reason.

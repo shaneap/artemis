@@ -21,15 +21,55 @@ import pandas as pd
 
 RESERVATION_SECTIONS = ['Black Duck', 'Evangeline', 'Open Lounge']
 
-# Confirmed seat ranges (not inferred). B13/B14 are deliberately absent: they're
-# standing-wait placeholders used when a guest is served while waiting for a real stool,
-# not physical seats, so they get no capacity and drop out of capacity-based checks.
+# --- Seating units -------------------------------------------------------------------
+#
+# The POS table code is not the physical unit. Black Duck and Evangeline are banquettes
+# subdivided into two codes each, and most Open Lounge tables pair up. A party booking a
+# whole unit gets recorded against one of its codes, which is why measuring guests against
+# per-code capacity flagged ~60% of Black Duck rows as "overbooked".
+#
+# The pairings are confirmed two ways: against Tock, and against the order data -- when a
+# code hosts a party too large for it alone, its partner is empty 92-100% of the time,
+# versus 20-66% for small parties. Non-adjacent control pairs show no such effect.
+#
+# Summing unit seats reproduces the operator's own section totals exactly:
+# Open Lounge 22, Black Duck 14, Evangeline 10, Bar 12.
+SEATING_UNITS = {
+    # Black Duck: an 8-seat and a 6-seat banquette. The 6 splits "3 and 2" per the
+    # operator's floor notes; the 8 splits into a 3-4 and a 4-5.
+    'BD 8-top banquette': {'tables': ('BD3', 'BD5'), 'seats': 8},
+    'BD 6-top banquette': {'tables': ('BD1', 'BD2'), 'seats': 6},
+
+    # Evangeline: two 2-tops that push together into a 4, plus the 5/6-seater.
+    'E 2+2 pair': {'tables': ('E1', 'E2'), 'seats': 4},
+    'E3 large': {'tables': ('E3',), 'seats': 6},
+
+    # Open Lounge: four confirmed combo pairs. O3 and O6 never combine -- 99% and 98% of
+    # their orders are two-guest.
+    'O1+O2': {'tables': ('O1', 'O2'), 'seats': 5},
+    'O4+O5': {'tables': ('O4', 'O5'), 'seats': 4},
+    'O7+O8': {'tables': ('O7', 'O8'), 'seats': 5},
+    'O9+O10': {'tables': ('O9', 'O10'), 'seats': 4},
+    'O3': {'tables': ('O3',), 'seats': 2},
+    'O6': {'tables': ('O6',), 'seats': 2},
+
+    # Bar stools are independent single seats, walk-up only.
+    **{f'B{i}': {'tables': (f'B{i}',), 'seats': 1} for i in range(1, 13)},
+}
+
+# Reverse index: table code -> the unit it belongs to.
+TABLE_TO_UNIT = {t: unit for unit, spec in SEATING_UNITS.items() for t in spec['tables']}
+
+# Solo seat ranges -- what a code seats when its partner is being used separately. These
+# are a soft guide (the banquettes flex); the binding constraint is the unit's seat count.
+# B13/B14 are deliberately absent: standing-wait placeholders used when a guest is served
+# while waiting for a real stool, not physical seats.
 CAPACITY_RANGES = {f'B{i}': (1, 1) for i in range(1, 13)}
 CAPACITY_RANGES.update({
-    'BD1': (2, 2),
-    'BD2': (2, 3),
-    'BD3': (3, 4),
-    'BD5': (2, 2),  # active, not retired -- comparable order volume to BD2/BD3 in this data
+    'BD1': (3, 4),  # larger half of the 6-top banquette
+    'BD2': (2, 3),  # confirmed against Tock
+    'BD3': (3, 4),  # confirmed against Tock
+    'BD5': (4, 5),  # larger half of the 8-top banquette
     'E1': (2, 2),
     'E2': (2, 2),
     'E3': (5, 6),
@@ -37,16 +77,6 @@ CAPACITY_RANGES.update({
     'O8': (3, 3),
 })
 CAPACITY_RANGES.update({f'O{i}': (2, 2) for i in range(1, 11) if f'O{i}' not in CAPACITY_RANGES})
-
-# Confirmed combined-table pairs in the Open Lounge. Toast never records a combined table
-# code -- each row always names a single table -- so these can't be detected in the order
-# data. Kept here as documentation of the physical floor, and used only for reference.
-OPEN_LOUNGE_COMBOS = {
-    ('O1', 'O2'): (4, 5),
-    ('O4', 'O5'): (3, 4),
-    ('O7', 'O8'): (4, 5),
-    ('O9', 'O10'): (3, 4),
-}
 
 
 def get_section(table):
@@ -64,12 +94,39 @@ def get_section(table):
     return 'Unknown'
 
 
+def get_unit(table):
+    """The physical seating unit a table code belongs to."""
+    if pd.isna(table):
+        return None
+    return TABLE_TO_UNIT.get(table)
+
+
+def unit_capacity(table):
+    """Seats in the physical unit this table code belongs to (NaN if unmapped)."""
+    unit = get_unit(table)
+    return SEATING_UNITS[unit]['seats'] if unit else np.nan
+
+
+def section_seats(section):
+    """Total seats in a section, summed over physical units rather than POS codes."""
+    return sum(spec['seats'] for spec in SEATING_UNITS.values()
+               if get_section(spec['tables'][0]) == section)
+
+
+def section_units(section):
+    """Physical seating units in a section -- the real count of seatable spaces."""
+    return [unit for unit, spec in SEATING_UNITS.items()
+            if get_section(spec['tables'][0]) == section]
+
+
 def table_count(section):
-    """How many real (capacity-bearing) tables a section has."""
+    """How many real (capacity-bearing) table codes a section has."""
     return sum(1 for t in CAPACITY_RANGES if get_section(t) == section)
 
 
 RESERVATION_TABLE_COUNT = sum(table_count(s) for s in RESERVATION_SECTIONS)
+RESERVATION_UNIT_COUNT = sum(len(section_units(s)) for s in RESERVATION_SECTIONS)
+SECTION_SEATS = {s: section_seats(s) for s in RESERVATION_SECTIONS + ['Bar']}
 
 
 # --------------------------------------------------------------------------------------
@@ -161,11 +218,23 @@ def load_orders(path, verbose=True):
     df['Capacity_Min'] = df['Table'].map(lambda t: CAPACITY_RANGES.get(t, (np.nan, np.nan))[0])
     df['Capacity_Max'] = df['Table'].map(lambda t: CAPACITY_RANGES.get(t, (np.nan, np.nan))[1])
 
-    # Toast records one table per order -- when staff combine tables for a large party, the whole
-    # check lands on a single "anchor" table with no trace of the others. So guests > capacity
-    # isn't bad data; for the table sections it's usually a real multi-table booking, and at the
-    # Bar it's usually a routine 2-top on a 1-seat stool.
-    df['Likely_Combined_Booking'] = df['# of Guests'] > df['Capacity_Max']
+    # The physical unit the code belongs to, and how many seats that unit really has.
+    df['Seating_Unit'] = df['Table'].map(get_unit)
+    df['Unit_Capacity'] = df['Table'].map(unit_capacity)
+
+    # Toast records one table code per order. When a party takes a whole banquette or pushes a
+    # confirmed pair together, the check lands on one anchor code -- so guests exceeding that
+    # *code's* solo capacity is normal, not a data problem.
+    #
+    # Exceeding the whole *unit's* capacity is the real signal of a multi-table booking that
+    # spans units, which Toast genuinely cannot reconstruct. Flagging against unit capacity is
+    # what makes Likely_Combined_Booking mean what its name says.
+    df['Likely_Combined_Booking'] = df['# of Guests'] > df['Unit_Capacity']
+
+    # The old per-code definition, kept so the difference stays measurable rather than silent.
+    # This is the one that flagged ~60% of Black Duck rows, because it measured parties against
+    # half a banquette.
+    df['Exceeds_Solo_Capacity'] = df['# of Guests'] > df['Capacity_Max']
 
     df = classify_order_type(df)
     df = add_service_day(df)

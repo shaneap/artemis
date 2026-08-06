@@ -24,6 +24,23 @@ def check(name, passed, detail=''):
     print(f'{"PASS" if passed else "FAIL"}  {name}' + (f'  --  {detail}' if detail else ''))
 
 
+# --- Floor plan -----------------------------------------------------------------------
+# Summing the seating units must reproduce the operator's own section totals. If a unit's
+# seat count or membership is edited carelessly, this is what catches it.
+EXPECTED_SECTION_SEATS = {'Open Lounge': 22, 'Black Duck': 14, 'Evangeline': 10, 'Bar': 12}
+for section, expected in EXPECTED_SECTION_SEATS.items():
+    got = artemis.section_seats(section)
+    check(f'{section} seat total', got == expected, f'{got} seats (expected {expected})')
+
+# Every capacity-bearing table code must belong to exactly one unit.
+unmapped = [t for t in artemis.CAPACITY_RANGES if artemis.get_unit(t) is None]
+check('every table code maps to a seating unit', not unmapped, f'unmapped: {unmapped}')
+
+seen = [t for spec in artemis.SEATING_UNITS.values() for t in spec['tables']]
+check('no table code appears in two units', len(seen) == len(set(seen)),
+      f'{len(seen)} memberships across {len(set(seen))} codes')
+
+
 df = artemis.load_orders(CSV, verbose=False)
 
 check('row count matches notebook post-clean count',
@@ -81,6 +98,29 @@ check('occupied time + gap time reconciles to the table-night span',
 gaps = seated['Turn_Gap'].dropna()
 check('no negative turn gaps survive into Turn_Gap', (gaps >= 0).all(),
       f'{len(gaps)} measured turns, min {gaps.min():.1f} min')
+
+# The seating units are a claim about physical furniture, and the order data can falsify it:
+# if two codes really share one banquette, then whenever one hosts a party too big to fit its
+# own half, the other must be empty. A pairing that drops below ~85% here is probably wrong.
+occupied_slots = set(zip(occ['Service_Date'], occ['Table'], occ['Slot']))
+worst_unit, worst_rate = None, 100.0
+for unit, spec in artemis.SEATING_UNITS.items():
+    if len(spec['tables']) != 2:
+        continue
+    for anchor, partner in (spec['tables'], spec['tables'][::-1]):
+        solo_max = artemis.CAPACITY_RANGES.get(anchor, (0, 0))[1]
+        big = seated[(seated['Table'] == anchor) & (seated['# of Guests'] > solo_max)]
+        if len(big) < 20:
+            continue
+        slots = ((big['Opened_DT'] - big['Service_Date']).dt.total_seconds() // 900).astype(int)
+        free = sum((d, partner, s) not in occupied_slots
+                   for d, s in zip(big['Service_Date'], slots))
+        rate = 100 * free / len(big)
+        if rate < worst_rate:
+            worst_unit, worst_rate = f'{anchor} (partner {partner}, n={len(big)})', rate
+
+check('seating-unit partners are free when the unit is booked whole',
+      worst_rate >= 85, f'weakest pairing: {worst_unit} at {worst_rate:.0f}% free')
 
 print()
 failed = [n for n, ok, _ in results if not ok]

@@ -2,6 +2,24 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-06 (later)
+
+### Added
+- **`SEATING_UNITS`** in `artemis.py` — models the real physical furniture rather than POS codes. Black Duck is a 6-seat (`BD1`+`BD2`) and an 8-seat (`BD3`+`BD5`) banquette; Evangeline is a 2+2 pair plus `E3`; the Open Lounge has four combo pairs plus two standalone tables. New `Seating_Unit` / `Unit_Capacity` columns, and `section_seats()` / `section_units()` helpers.
+- Seat-total and partner-free invariants in `verify_artemis.py` (14 checks, all passing).
+
+### Changed
+- **`Likely_Combined_Booking` now measures against whole-unit capacity** instead of per-code capacity. The old per-code definition is retained as `Exceeds_Solo_Capacity` so the difference stays measurable rather than silent.
+- **Black Duck capacities corrected**: `BD1` 2 → 3-4 and `BD5` 2 → 4-5, giving the section its real 14 seats instead of 11. Cross-referenced against Tock. Open Lounge and Evangeline per-code capacities were already correct and are unchanged.
+- The VPCPM/TPCPM section summary now covers party sizes up to 8 in Black Duck (previously 1-4), because whole-banquette bookings are no longer misclassified as combined bookings and excluded. LOOCV-selected `k` values shifted accordingly (Black Duck VPCPM 50 → 20, TPCPM 8 → 2).
+
+### Findings
+- **The combined-booking problem was mostly a measurement error.** Flag rate falls from 49% → 9% (Black Duck), 27% → 7% (Evangeline), 27% → 1% (Open Lounge). Guest counts had been compared against half a banquette. What remains — ~108 rows, ~$41K, median 8 guests — genuinely spans units and is still unrecoverable from Toast.
+- **The banquette pairings are independently confirmed by the data.** When a code hosts a party too large for its own half, its partner is free 92-100% of the time versus 20-66% for small parties; non-adjacent control pairs show no effect.
+
+### Retracted
+- **"`E3` is the only table seating 5+, and 75% of large parties are seated ad hoc"** — an artifact of the pre-banquette capacity model. Corrected: **81% of parties of 5+ fit entirely within one physical unit**, and 30 of 46 reservation seats sit in units taking five or more. The floor plan serves this segment well. Notebook, README and the prior changelog entry updated.
+
 ## 2026-08-06
 
 ### Added
