@@ -43,6 +43,12 @@ Large parties are the most valuable per hour of table time — 15.6% of seatings
 
 Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Six months cannot separate that from seasonality.
 
+## The owner-facing report
+
+[owner_report.html](owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, and the Tock access request. Open it in a browser, or publish it as an artifact.
+
+It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python report_figures.py [export.csv]` recomputes every number the report quotes**, labelled and in the order they appear — drop in a newer export, run it, and update the figures against the output.
+
 ## The owner's questions
 
 `analysis.ipynb` closes with a section answering the operator's seven written questions directly. In brief:

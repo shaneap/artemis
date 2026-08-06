@@ -2,6 +2,15 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-06 (Step 3)
+
+### Added
+- **`owner_report.html`** — the owner-facing deliverable. Covers the three original questions, the four seating/pricing questions from the bar visit, the floor-plan correction, the footfall trend, and the Tock access request. Written as a plain report rather than a dashboard, at the operator's request.
+- **`report_figures.py`** — recomputes every figure quoted in the report, labelled and in document order, so a newer export can be reflected without re-deriving anything by hand. Deliberately not a page generator: the report's prose is the substance and templating it would make it worse.
+
+### Note
+- The report is deliberately hand-written. `report_figures.py` is the guard against it going stale — run it whenever the underlying export changes and reconcile the numbers.
+
 ## 2026-08-06 (Step 2)
 
 ### Added
