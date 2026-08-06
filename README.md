@@ -11,7 +11,7 @@ The shared pipeline lives in [artemis.py](artemis.py); the analysis notebook ([a
 
 **Active / exploratory.** The core pipeline (load → clean → section/capacity mapping → VPCPM/TPCPM → shrinkage-weighted section summaries) runs end to end with no known correctness bugs. See [CHANGELOG.md](CHANGELOG.md) for what's been fixed and when.
 
-Run `python verify_artemis.py` to check the pipeline's invariants (row counts, service-day boundary, occupancy bounds, turn-gap reconciliation).
+Run `python verify_artemis.py` to check the pipeline's invariants (row counts, service-day boundary, occupancy bounds, turn-gap reconciliation, seat totals, banquette pairings).
 
 **Known open issues (not yet resolved):**
 - **Multi-table/combined bookings are unrecoverable from Toast exports** — see [Combined bookings & the capacity mismatch](#combined-bookings--the-capacity-mismatch) below. Current mitigation is a flag (`Likely_Combined_Booking`) that splits these rows into a descriptive-only summary; this is a backburner item pending a POS-side or process-level fix, not something fixable in the notebook alone.
@@ -41,11 +41,11 @@ Party-size steering fails the same test — only 1.3% of seatings put a small pa
 
 Large parties are the most valuable per hour of table time — 15.6% of seatings, **30% of section revenue** — but there is no layout problem to solve: **81% of parties of 5+ fit entirely within a single physical unit**, and 30 of the 46 reservation seats sit in units that take five or more. (An earlier version of this README claimed `E3` was the only such table; that was an artifact of the pre-banquette capacity model and is retracted.)
 
-Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Six months cannot separate that from seasonality.
+Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Whether that is decline or seasonality **cannot be settled from this window** — see [Weather, and why the decline can't be called](#weather-and-why-the-decline-cant-be-called).
 
 ## The owner-facing report
 
-[owner_report.html](owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, and the Tock access request. Open it in a browser, or publish it as an artifact.
+[owner_report.html](owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
 
 It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python report_figures.py [export.csv]` recomputes every number the report quotes**, labelled and in the order they appear — drop in a newer export, run it, and update the figures against the output.
 
@@ -56,7 +56,7 @@ It is hand-written prose rather than a generated page, because the narrative is 
 | Question | Answer |
 | --- | --- |
 | Seat 2/3-guest parties back to back? | Not where the money is — worth ~$9K/yr, and only if someone is waiting |
-| Revenue by time of day? | In progress — utilization by day is done, demand curves are next |
+| Revenue by time of day? | **Answered** — open at 5pm Tue–Thu, close at midnight Tue/Wed/Sun, leave Fri/Sat alone |
 | Value per person per 15 min? | Done — ~$6–8/guest; more usefully, $61/table-hour for a 2-top vs $126 for a 6-top |
 | Are the $1,200 / $900 event rates priced well? | **Yes** — each beats 99% of nights' best 3-hour blocks |
 | Should `E3` seat a 4? | **Yes** — the conflict arises about once every five nights, and those parties still got seated |
@@ -64,6 +64,43 @@ It is hand-written prose rather than a generated page, because the narrative is 
 | Weight larger parties in 15-min intervals? | Already handled — TPCPM does this by construction; the allowance isn't binding either |
 
 Two refinements on event pricing: the midweek premium is much larger than the weekend one (~$830 on a Tuesday vs ~$458 on a Saturday), so midweek discounting is nearly free; and Black Duck's best-ever 3-hour block of $1,440 exceeds the $1,200 rate, so peak weekends are slightly underpriced.
+
+## Revenue by time of day
+
+Friday and Saturday are a different business from the rest of the week — $7,300–8,100 a night, running past 1am. Tuesday to Thursday take $2,100–3,300 and are finished by 11. Sunday is an afternoon trade: **25% of its takings land between 4 and 6pm**, and it is dead after 11.
+
+Opening hours are framed as a **break-even rather than a recommendation**, since what an hour of trading costs isn't in this data. What each marginal hour *earns* per night:
+
+| Night | 4–5pm | 5–6pm | 11pm–12 | 12–1am | Whole night |
+| --- | --- | --- | --- | --- | --- |
+| Tuesday | $46 | $138 | $146 | $20 | $2,154 |
+| Wednesday | $64 | $182 | $217 | $42 | $2,527 |
+| Thursday | $77 | $187 | $350 | $76 | $3,287 |
+| Friday | $169 | $559 | $844 | $494 | $7,318 |
+| Saturday | $403 | $911 | $865 | $612 | $8,149 |
+| Sunday | $289 | $398 | $93 | $11 | $2,735 |
+
+Three changes worth trialling: open at 5pm rather than 4pm Tue–Thu; close at midnight Tue/Wed/Sun; leave Fri/Sat alone.
+
+## Weather, and why the decline can't be called
+
+`weather.py` pulls daily observations for Ronkonkoma from Open-Meteo's historical archive (free, no key) and caches them to `weather_cache.csv`, so the notebook runs offline after the first execution. All 153 trading nights match with no gaps.
+
+**Rain does not matter** — wet Fri/Sat nights average $7,592 against $7,903 dry, inside the noise.
+
+**Temperature appears to matter enormously, and that reading is not safe.** Fri/Sat revenue correlates −0.72 with the daytime high. But over a January-to-July window, elapsed time and temperature correlate at **r = 0.90** — they are very nearly the same variable:
+
+| Model | R² |
+| --- | --- |
+| Time only | 0.858 |
+| Temperature only | 0.861 |
+| Both | 0.861 |
+
+Adding temperature to the time model gains +0.003; adding time to the temperature model gains +0.000. The discriminating test — do hot nights underperform *within* their own month, where time barely moves — is too weak to settle it (pooled r = −0.221 across 51 nights, flipping sign between months).
+
+**So the honest answer is a bound, not a decomposition:** if the fall in trade is entirely seasonal the business is flat; if none of it is, it is losing roughly **$57/night per week elapsed**. Both fit equally well.
+
+**What would settle it:** the same calendar months from the previous year, exported from Toast. Over a full year temperature cycles back down while elapsed time keeps advancing, which breaks the overlap. It is an existing report on a system already in use — no new permission required.
 
 ## Order types
 

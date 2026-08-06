@@ -174,3 +174,73 @@ print(trend[['nights', 'parties/night', 'avg_party', 'revenue/night']].round(2).
 heading('EXCLUDED FROM TABLE FIGURES')
 excluded = raw[raw['Order_Type'] != 'Seated'].groupby('Order_Type')['Amount'].agg(['count', 'sum'])
 print(excluded.round(0).to_string())
+
+# --------------------------------------------------------------------------------------
+# Phase 3 -- hours, weather, seasonality
+# --------------------------------------------------------------------------------------
+import weather  # noqa: E402  (kept here so the earlier sections run without a network call)
+
+all_seated = seated[seated['Order_Type'] == 'Seated']
+nightly = (all_seated.groupby(['Service_Date', 'Service_DOW'])
+           .agg(Revenue=('Amount', 'sum'), Parties=('Amount', 'count'))
+           .reset_index())
+nightly = weather.add_holidays(weather.add_weather(nightly))
+
+hours = artemis.build_occupancy(all_seated)
+hours['Hour'] = (hours['Clock_Minutes'] // 60).astype(int)
+per_dow_nights = seated.groupby('Service_DOW')['Service_Date'].nunique()
+by_hour = hours.groupby(['Service_DOW', 'Hour'])['Slot_Revenue'].sum().reset_index()
+by_hour['per night'] = by_hour['Slot_Revenue'] / by_hour['Service_DOW'].map(per_dow_nights)
+shape = (by_hour.pivot_table(index='Hour', columns='Service_DOW', values='per night')
+                .reindex(columns=DOW_ORDER).fillna(0))
+
+heading('MARGINAL HOURS (what each edge hour earns per night)')
+edges = shape.loc[[16, 17, 23, 24, 25]].T
+edges.columns = ['4-5pm', '5-6pm', '11pm-12', '12-1am', '1-2am']
+edges['whole night'] = shape.sum(axis=0)
+print(edges.reindex(DOW_ORDER).round(0).to_string())
+print('\nshare of night in the 4-6pm block, and after midnight:')
+print(pd.DataFrame({
+    '4-6pm %': 100 * shape.loc[[16, 17]].sum() / shape.sum(axis=0),
+    'after midnight %': 100 * shape.loc[[24, 25, 26]].sum() / shape.sum(axis=0),
+}).reindex(DOW_ORDER).round(1).to_string())
+
+heading('WEATHER')
+wknd = nightly[nightly['Service_DOW'].isin(['Friday', 'Saturday'])]
+for col, label in [('Temp_High_F', 'daytime high'), ('Precip_In', 'precipitation'),
+                   ('Wind_Max_Mph', 'max wind')]:
+    print(f'  r(revenue, {label:14}) all nights {nightly["Revenue"].corr(nightly[col]):+.3f}   '
+          f'Fri/Sat {wknd["Revenue"].corr(wknd[col]):+.3f}')
+wet = wknd['Precip_In'] > 0.05
+print(f'\n  Fri/Sat wet ${wknd.loc[wet, "Revenue"].mean():,.0f} (n={wet.sum()}) '
+      f'vs dry ${wknd.loc[~wet, "Revenue"].mean():,.0f} (n={(~wet).sum()})')
+
+heading('SEASONALITY -- WHY IT CANNOT BE SETTLED')
+nightly['Week'] = (nightly['Service_Date'] - nightly['Service_Date'].min()).dt.days / 7
+
+
+def _r2(design, target):
+    design = design.dropna()
+    y = target.loc[design.index]
+    beta, *_ = np.linalg.lstsq(design.values, y.values, rcond=None)
+    resid = y.values - design.values @ beta
+    return dict(zip(design.columns, beta)), 1 - (resid ** 2).sum() / ((y - y.mean()) ** 2).sum()
+
+
+dummies = pd.get_dummies(nightly['Service_DOW'], drop_first=True).astype(float)
+dummies['const'] = 1.0
+coef_t, r2_t = _r2(dummies.assign(week=nightly['Week']), nightly['Revenue'])
+_, r2_w = _r2(dummies.assign(temp=nightly['Temp_High_F']), nightly['Revenue'])
+_, r2_b = _r2(dummies.assign(week=nightly['Week'], temp=nightly['Temp_High_F']), nightly['Revenue'])
+print(f'  r(elapsed time, temperature) = {nightly["Week"].corr(nightly["Temp_High_F"]):+.3f}')
+print(f'  R2  time only {r2_t:.3f} | temperature only {r2_w:.3f} | both {r2_b:.3f}')
+print(f'  gain from adding temperature {r2_b - r2_t:+.3f}; from adding time {r2_b - r2_w:+.3f}')
+print(f'  upper bound on decline if none of it is seasonal: '
+      f'${abs(coef_t["week"]):,.0f}/night per week elapsed')
+
+heading('HOLIDAYS AND DARK NIGHTS')
+hol = nightly[nightly['Is_Holiday']]
+print(hol[['Service_Date', 'Service_DOW', 'Holiday', 'Revenue']].round(0).to_string(index=False))
+saturdays = set(pd.date_range(nightly['Service_Date'].min(), nightly['Service_Date'].max(), freq='W-SAT'))
+dark = sorted(d.date().isoformat() for d in saturdays - set(nightly['Service_Date']))
+print(f'\nSaturdays with no trading at all: {dark or "none"}')
