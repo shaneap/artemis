@@ -2,6 +2,27 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-06 (Phase 3)
+
+### Added
+- **`weather.py`** — daily Ronkonkoma observations from Open-Meteo's historical archive, cached to `weather_cache.csv` (gitignored) so the notebook runs offline after the first execution. Includes a holiday calendar weighted to what a bar notices (Valentine's, Mother's/Father's Day) rather than the federal list. Handles the macOS SSL-root problem explicitly: prefers `certifi`, falls back to extracting system keychain roots, and raises an actionable error if neither works.
+- **"Revenue by Time of Day" notebook section** — hourly demand curves per day of week, the opening-hours break-even, weather and holiday effects, and the seasonality analysis.
+- Phase 3 figures added to `report_figures.py`.
+
+### Findings
+- **The week splits into three businesses.** Fri/Sat take $7,318/$8,149 and run past 1am. Tue–Thu take $2,154–3,287 and are done by 11. Sunday is an afternoon trade — 25% of takings between 4 and 6pm, dead after 11.
+- **Opening hours, as a break-even rather than a recommendation** (labour cost isn't in the data): the 4–5pm hour earns $46 Tue / $64 Wed / $77 Thu, against $403 Sat. The midnight hour earns $20 Tue / $42 Wed / $11 Sun against $494 Fri / $612 Sat. Suggests opening at 5pm Tue–Thu, closing at midnight Tue/Wed/Sun, and leaving Fri/Sat untouched.
+- **Rain has no effect** — wet Fri/Sat $7,592 vs dry $7,903, inside the noise.
+- **July 4th was the only dark Saturday in six months**, on the highest-earning day of the week.
+
+### Methodology
+- **The decline-or-seasonality question cannot be answered from this window, and the notebook now demonstrates why rather than asserting it.** Elapsed time and temperature correlate at r = +0.901 over Jan–Jul; time-only R² = 0.858, temperature-only 0.861, both 0.861. Adding either to the other gains ≈0. The discriminating within-month test is too weak to break the tie (pooled r = −0.221, sign flips between months on 6–10 nights each).
+- Reported as a bound instead: flat if entirely seasonal, −$57/night per week elapsed if none of it is. **The fix is last year's Toast export** — an existing report, no new permission — which is now the first ask in the owner report, ahead of Tock.
+- The Fri/Sat temperature correlation of −0.719 is presented **with** that caveat rather than as a finding, since it is inseparable from the time trend.
+
+### Fixed
+- Whole-night totals in the break-even table were computed from the chart-clipped 15:00–26:00 window, dropping ~$924 of early-afternoon seatings across six months. Now computed from the unclipped hourly data; the notebook and `report_figures.py` agree exactly (Fri $7,318, Sat $8,149, Sun $2,735).
+
 ## 2026-08-06 (Step 3)
 
 ### Added

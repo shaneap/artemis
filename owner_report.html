@@ -176,6 +176,8 @@
   tr:last-child td { border-bottom: none; }
   .num-cell { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .em { color: var(--ink); font-weight: 600; }
+  /* an hour that plausibly earns less than it costs to stay open for */
+  .warnlow { color: var(--warn); }
 
   /* bar drawn as a plain width, not a chart widget */
   .bar-cell { width: 42%; min-width: 7rem; }
@@ -248,7 +250,8 @@
       That's worth knowing before spending money or staff attention on the wrong problem.
       Two of the ideas we discussed &mdash; tightening turnaround between parties, and being
       stricter about which party sits at which table &mdash; I tested properly, and both come
-      out worth very little. The detail is below.
+      out worth very little. What does look worth changing is <b>when the doors are open</b>,
+      and that's covered under question two.
     </p>
   </section>
 
@@ -304,10 +307,12 @@
         <div class="body">
           <h3>Revenue by time of day</h3>
           <p class="ask">"Revenue by time (depending on opening)"</p>
-          <p><span class="verdict wip">Part done &mdash; the piece I'd continue with</span></p>
+          <p><span class="verdict yes">Answered</span></p>
           <p>
-            I can now measure how full the room is at any point in any night. The pattern by
-            day is stark, and it's where I think the remaining opportunity sits.
+            Friday and Saturday are a different business from the rest of the week. They take
+            $7,300&ndash;8,100 a night and run past 1am. Tuesday to Thursday take $2,100&ndash;3,300 and
+            are finished by 11. Sunday is different again &mdash; an afternoon trade that's done
+            before the others have got going.
           </p>
           <div class="scroll">
             <table>
@@ -326,10 +331,46 @@
             </table>
           </div>
           <p>
-            Even the best night sells under half its table time. To turn this into an actual
-            recommendation on opening hours I need one number from you: roughly what it costs
-            to keep the doors open for an hour, staff included. With that I can say which
-            hours pay for themselves and which don't.
+            On the hours themselves &mdash; rather than guess at what an hour of staffing costs you,
+            here's what each hour at the edges of the night actually <em>earns</em>. Keep the hour
+            if it brings in more than it costs you to open for it:
+          </p>
+          <div class="scroll">
+            <table>
+              <caption>What each marginal hour earns, per night</caption>
+              <thead>
+                <tr><th>Night</th><th>4&ndash;5pm</th><th>5&ndash;6pm</th><th>11pm&ndash;12</th><th>12&ndash;1am</th><th>Whole night</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Tuesday</td><td class="num-cell warnlow">$46</td><td class="num-cell">$138</td><td class="num-cell">$146</td><td class="num-cell warnlow">$20</td><td class="num-cell">$2,154</td></tr>
+                <tr><td>Wednesday</td><td class="num-cell warnlow">$64</td><td class="num-cell">$182</td><td class="num-cell">$217</td><td class="num-cell warnlow">$42</td><td class="num-cell">$2,527</td></tr>
+                <tr><td>Thursday</td><td class="num-cell warnlow">$77</td><td class="num-cell">$187</td><td class="num-cell">$350</td><td class="num-cell">$76</td><td class="num-cell">$3,287</td></tr>
+                <tr><td>Friday</td><td class="num-cell">$169</td><td class="num-cell">$559</td><td class="num-cell">$844</td><td class="num-cell em">$494</td><td class="num-cell">$7,318</td></tr>
+                <tr><td>Saturday</td><td class="num-cell">$403</td><td class="num-cell">$911</td><td class="num-cell">$865</td><td class="num-cell em">$612</td><td class="num-cell">$8,149</td></tr>
+                <tr><td>Sunday</td><td class="num-cell">$289</td><td class="num-cell">$398</td><td class="num-cell warnlow">$93</td><td class="num-cell warnlow">$11</td><td class="num-cell">$2,735</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <p><b>Three changes worth trialling.</b></p>
+            <p>
+              <b>Open at 5pm rather than 4pm, Tuesday to Thursday.</b> That first hour brings in
+              $46 to $77. One bartender standing there costs more than that.
+            </p>
+            <p>
+              <b>Close at midnight on Tuesday, Wednesday and Sunday.</b> The midnight hour earns
+              $20, $42 and $11 respectively &mdash; essentially nothing.
+            </p>
+            <p>
+              <b>Leave Friday and Saturday exactly as they are.</b> They take $494 and $612 in
+              that same midnight hour, plus another ~$100 after 1am. That's real trade and it
+              would be a mistake to trim it.
+            </p>
+          </div>
+          <p>
+            Sunday deserves its own note: <b>a quarter of its takings arrive between 4 and 6pm</b>,
+            and it's dead after 11. It's an afternoon business wearing the same opening hours as
+            a late-night one.
           </p>
         </div>
       </div>
@@ -474,7 +515,7 @@
   <hr>
 
   <section>
-    <h2>Two things you didn't ask about</h2>
+    <h2>Three things you didn't ask about</h2>
 
     <h3>The floor plan was recorded wrong, and it was distorting everything</h3>
     <p>
@@ -504,6 +545,22 @@
       genuinely large bookings that really did span several tables.
     </p>
 
+    <h3 style="margin-top:1.1rem">Rain doesn't matter. Heat might &mdash; but I can't prove it.</h3>
+    <p>
+      I pulled six months of Ronkonkoma weather and matched it to every trading night. Rain makes
+      no difference worth acting on: wet Friday and Saturday nights averaged $7,592 against $7,903
+      dry, which is inside the normal variation. Worth knowing, so nobody writes off a slow night
+      because of the forecast.
+    </p>
+    <p>
+      Temperature looks like a much bigger deal &mdash; Friday and Saturday takings move
+      <em>against</em> the daytime high quite strongly. <b>But I don't trust that reading, and I'd
+      rather say so than hand you a number that falls apart later.</b> The data runs January to
+      July, so the weather warms up at exactly the same pace the calendar advances. Statistically
+      the two are almost the same thing, and there's no way to tell which one the takings are
+      actually responding to.
+    </p>
+
     <h3 style="margin-top:1.1rem">Guest numbers are falling, and it isn't about party size</h3>
     <div class="scroll">
       <table>
@@ -520,10 +577,28 @@
     </div>
     <p>
       Fewer groups are coming in; the ones that do are the same size as ever. That's a footfall
-      question, not a menu or seating one. <b>Six months isn't enough to separate this from
-      normal summer seasonality</b> &mdash; I'd want a full year before drawing a conclusion, and I'd
-      rather flag it now than have it arrive as a surprise.
+      question, not a menu or seating one.
     </p>
+    <p>
+      <b>I can't tell you yet whether this is a real decline or just summer</b>, and it's the same
+      problem as the temperature above &mdash; over a January-to-July window, "business getting quieter"
+      and "weather getting warmer" are indistinguishable. If it's entirely seasonal, trade is flat.
+      If none of it is, we're losing around <b>$57 a night for every week that passes</b>. Both fit
+      the data equally well, and picking a point between them would be inventing precision.
+    </p>
+    <p>
+      This is the most important open question in the whole analysis, and it has a cheap answer &mdash;
+      see below.
+    </p>
+    <div class="note">
+      <p>
+        <b>One thing worth a second look.</b> July 4th was the only Saturday in the entire six
+        months with no trade at all. Saturdays average $8,149. If closing was a deliberate call it
+        may well have been the right one &mdash; people are at fireworks and back yards &mdash; but it's the
+        single most valuable day of the week, so it's worth being deliberate about rather than
+        defaulting to.
+      </p>
+    </div>
   </section>
 
   <hr>
@@ -532,18 +607,28 @@
     <h2>What would help next</h2>
     <p>
       Every answer above points the same direction: the room isn't full, so the question worth
-      solving is what brings people in and when. Toast can't answer that on its own &mdash; it only
-      records the business we <em>served</em>, never the business we turned away or never got.
+      solving is what brings people in and when. Two things would move that on, and the first one
+      costs nothing at all.
     </p>
     <p>
-      <b>Access to the Tock booking data would close that gap.</b> Specifically: when a booking
-      was made, when the party was actually seated, party size, and whether it was kept,
-      cancelled or a no-show. That tells us how far ahead people book, how many don't turn up,
-      and which nights genuinely run out of room &mdash; none of which is visible today.
+      <b>1. Last year's Toast export, same months.</b> This is the one I'd ask for first. It's an
+      existing report in a system we already use &mdash; no new permission, no new setup, about five
+      minutes of somebody's time. Comparing January&ndash;July this year against January&ndash;July last year
+      settles the decline-or-seasonality question outright, because last summer's numbers tell us
+      what a normal summer looks like here. Right now that's the biggest thing I can't see, and
+      it's also the cheapest to fix.
     </p>
     <p>
-      With that plus an hourly running-cost figure, I can finish the opening-hours question
-      properly and put numbers on which nights are worth staffing.
+      <b>2. The Tock booking data.</b> Toast only records the business we <em>served</em> &mdash; never
+      what we turned away or never got. Tock knows: when a booking was made, when the party was
+      actually seated, party size, and whether it was kept, cancelled or a no-show. That tells us
+      how far ahead people book, how many don't show, and which nights genuinely run out of room.
+    </p>
+    <p class="muted">
+      The one number I'd still like from you is roughly what an hour of being open costs in wages
+      and overhead. The hourly figures above are deliberately left as earnings so you can hold them
+      against your own cost &mdash; but with it I can turn "here's what that hour earns" into a
+      straight recommendation.
     </p>
   </section>
 
@@ -569,11 +654,18 @@
         distort any per-table number &mdash; but they're real revenue and are tracked separately.
       </p>
       <p>
+        <b>Weather</b> is daily observed data for Ronkonkoma from the Open-Meteo historical
+        archive, matched to all 153 trading nights with no gaps.
+      </p>
+      <p>
         <b>Known limits.</b> Toast records when a party paid, not when the table was cleared, so
         the gap between parties blends guests lingering, staff resetting, and nobody waiting.
         The event-pricing comparison treats the quoted rate as the whole value of the booking &mdash;
-        if events also drive bar spend, they're worth more than shown. And the six-month window
-        can't distinguish a seasonal dip from a real decline.
+        if events also drive bar spend, they're worth more than shown. The hourly figures spread
+        each check evenly across the time that party sat, which is a reasonable approximation but
+        not exact. And most importantly, a January-to-July window cannot separate a seasonal dip
+        from a real decline, or a temperature effect from the passage of time &mdash; which is why
+        last year's export is the first thing on the list above.
       </p>
     </div>
   </section>
