@@ -2,7 +2,7 @@
 
 Exploratory analysis of restaurant order data — looking at how table value scales with party size, and at how tables are used across a night, to inform seating and table-management decisions.
 
-The shared pipeline lives in [artemis.py](artemis.py); the notebook ([test.ipynb](test.ipynb)) imports it. There are two layers:
+The shared pipeline lives in [artemis.py](artemis.py); the analysis notebook ([analysis.ipynb](analysis.ipynb)) imports it. There are two layers:
 
 - **Per-order layer** — loads per-order exports (guest count, amount, open/close times), derives table duration and two revenue-rate metrics (VPCPM/TPCPM), and visualizes how they trend across party sizes and seating sections.
 - **Time layer** — reconstructs what the floor actually looked like: which tables were occupied in each 15-minute slot, and how long each table sat empty between parties. The per-order layer examines one order at a time and so cannot see a table sitting idle between two healthy-looking checks.
@@ -43,6 +43,22 @@ Large parties are the most valuable per hour of table time — 15.6% of seatings
 
 Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Six months cannot separate that from seasonality.
 
+## The owner's questions
+
+`analysis.ipynb` closes with a section answering the operator's seven written questions directly. In brief:
+
+| Question | Answer |
+| --- | --- |
+| Seat 2/3-guest parties back to back? | Not where the money is — worth ~$9K/yr, and only if someone is waiting |
+| Revenue by time of day? | In progress — utilization by day is done, demand curves are next |
+| Value per person per 15 min? | Done — ~$6–8/guest; more usefully, $61/table-hour for a 2-top vs $126 for a 6-top |
+| Are the $1,200 / $900 event rates priced well? | **Yes** — each beats 99% of nights' best 3-hour blocks |
+| Should `E3` seat a 4? | **Yes** — the conflict arises about once every five nights, and those parties still got seated |
+| Should `BD1`+`BD2` seat a 5? | **Yes**, and it already happens — they are one 6-seat banquette |
+| Weight larger parties in 15-min intervals? | Already handled — TPCPM does this by construction; the allowance isn't binding either |
+
+Two refinements on event pricing: the midweek premium is much larger than the weekend one (~$830 on a Tuesday vs ~$458 on a Saturday), so midweek discounting is nearly free; and Black Duck's best-ever 3-hour block of $1,440 exceeds the $1,200 rate, so peak weekends are slightly underpriced.
+
 ## Order types
 
 Orders are labelled `Seated` / `Event-Catering` / `To-Go`. Previously everything without a table fell through the `Duration >= 15` floor and disappeared — about **$104K** of real revenue (10.7% event/catering, 2.4% to-go), silently. These aren't seated tables so they still don't belong in per-seat metrics, but they're no longer invisible.
@@ -69,7 +85,7 @@ pip install -r requirements.txt
 Then launch the notebook:
 
 ```bash
-jupyter notebook test.ipynb
+jupyter notebook analysis.ipynb
 ```
 
 ## Data

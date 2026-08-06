@@ -1,6 +1,6 @@
 """Shared data pipeline for the Artemis bar analysis.
 
-The notebook (`test.ipynb`) and any report generator both import from here so there is
+The notebook (`analysis.ipynb`) and any report generator both import from here so there is
 exactly one copy of the loading/cleaning rules.
 
 Two layers live in this module:

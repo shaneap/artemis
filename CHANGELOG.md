@@ -2,6 +2,21 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-06 (Step 2)
+
+### Added
+- **"The Owner's Questions" notebook section** — each of the operator's seven written questions answered from the data, with a summary of all seven at the end.
+- **Event-pricing analysis.** Values a 3-hour private-event block against what that section earns in its best three hours of ordinary service, by day of week, via a rolling 12-slot sum over the occupancy timeline. Cross-checked against whole-night section revenue (asserted in-cell).
+
+### Changed
+- `test.ipynb` → **`analysis.ipynb`**. It was never a test — `verify_artemis.py` is the test suite — and the old name was misleading. Renamed with `git mv` so history follows; references updated in `README.md` and `artemis.py`.
+
+### Findings
+- **Both event rates are well priced.** $1,200 (Black Duck) beats the section's best 3-hour block on 99% of nights (median $616); $900 (Evangeline) likewise (median $581). Two refinements: the midweek premium is far larger than the weekend one (~$830 on a Tuesday vs ~$458 on a Saturday), and Black Duck's best-ever 3-hour block of $1,440 exceeds the $1,200 price, so peak weekends are slightly underpriced.
+- **E3 should seat parties of 4.** A 5-or-6 party finds E3 held by a smaller party about once every five nights, and in every observed case was still seated — both Black Duck banquettes take that size too.
+- **BD1&2 already seat 5s, correctly.** They are one 6-seat banquette, so a five needs no combining; 30 such parties, $115/table-hour. Both banquettes are idle for ~half of peak hours.
+- **The reservation allowance is not binding.** 43–56% of every party size runs past it, but the room was >75% full during only 5% of those overstays. On weighting larger parties in 15-minute intervals: TPCPM already does this by construction.
+
 ## 2026-08-06 (later)
 
 ### Added
