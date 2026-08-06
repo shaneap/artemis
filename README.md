@@ -28,6 +28,21 @@ Three concepts, all derived from `Opened` + `Duration` — no new data required.
 
 Two data artifacts are handled explicitly rather than silently: gaps are never computed across two nights, and ~2% of consecutive same-table pairs *overlap* (the next party appears seated before the previous paid — the combined-check artifact). Overlapping pairs get a null gap and are counted in `Turn_Overlap` so the rate stays visible.
 
+## Key finding: the constraint is demand, not capacity or turn speed
+
+The turn-gap work was set up to test whether idle time between parties is a recoverable lever. **It isn't**, and the evidence is fairly conclusive:
+
+- Gaps **collapse as the room fills** — 65 min when the room is under a quarter full, 24 min when over three quarters. Lingering guests and slow bussing would not behave that way; absence of waiting customers would.
+- **The room never fills.** Zero 15-minute slots in six months had all 17 reservation tables occupied; only 16 slots (about four hours of trading) reached 15 of 17. Median utilization while open is 29%, peaking around 43% on Fri/Sat.
+- **No individual table is chronically bad** — best to worst spans 13 minutes across 17 tables.
+- Honest value of faster turning: **~$9K/yr**, against $156K if you assume every freed minute sells. Turn gaps are only **9.4%** of unsold table time; the other 90.6% is tables that never got a party at all.
+
+Party-size steering fails the same test — only 1.3% of seatings put a small party at a bigger table while the room was busy enough for it to matter.
+
+What does survive is a **floor-plan** finding: parties of 5+ are 15.6% of seatings and **30% of section revenue**, but exactly one table (`E3`) seats one without pushing furniture together, so three quarters of that segment is accommodated ad hoc. This is also the root cause of the combined-booking problem below.
+
+Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Six months cannot separate that from seasonality.
+
 ## Order types
 
 Orders are labelled `Seated` / `Event-Catering` / `To-Go`. Previously everything without a table fell through the `Duration >= 15` floor and disappeared — about **$104K** of real revenue (10.7% event/catering, 2.4% to-go), silently. These aren't seated tables so they still don't belong in per-seat metrics, but they're no longer invisible.

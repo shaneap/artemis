@@ -2,6 +2,21 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-06
+
+### Added
+- **"Turn Times & Table Utilization" notebook section** — gap distribution by section/day/hour, per-table ranking, the gap-vs-room-fullness test, three sizing scenarios, unsold-time decomposition, party-size economics, and the large-party floor-plan analysis.
+
+### Findings
+- **The turn-time hypothesis was wrong.** Idle time between parties is not a recoverable lever: gaps collapse from a 65-min median when the room is under a quarter full to 24 min when it is over three quarters full, which is the signature of missing demand rather than slow operations. The room never once reached full occupancy in six months (median utilization while open: 29%). Honest value of faster turning is **~$9K/yr**, not the $156K a naive every-minute-sells calculation produces. Turn gaps are 9.4% of unsold table time; 90.6% is tables that never got a party.
+- **No individual table is chronically badly turned** — 13-minute spread across 17 tables. `BD3`'s 296-minute Friday was a single bad night, not a pattern; its median gap is average.
+- **Party-size steering is not actionable** — only 1.3% of seatings put a small party at a larger table while the room was busy enough for it to matter.
+- **Floor plan versus demand mix** — parties of 5+ are 15.6% of seatings and 30% of section revenue, but only `E3` seats one without combining tables. 75% of that segment is seated ad hoc, which is the root cause of the scale of the `Likely_Combined_Booking` issue.
+- **The decline is footfall, not mix** — parties/night fell ~26 → ~18 while average party size held. Six months cannot separate this from seasonality.
+
+### Fixed
+- Large-party blocking analysis initially counted parties seated *at* `E3` as blocked by `E3`, since a party occupies its own table in its own arrival slot. Corrected to exclude them: of the 405 5+ parties seated elsewhere, `E3` was occupied for 186 and free for 219.
+
 ## 2026-08-04
 
 ### Added
