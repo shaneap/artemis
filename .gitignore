@@ -2,8 +2,10 @@
 .Rhistory
 .Rproj.user/
 
-# Data exports (not tracked — regenerate/download locally)
+# Toast exports in data/exports/, and the merged dataset built from them
+# (not tracked — re-download the exports and run merge_exports.py)
 *.csv
+data/orders_merged.meta.json
 
 # Jupyter
 .ipynb_checkpoints/

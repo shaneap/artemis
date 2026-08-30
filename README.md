@@ -47,7 +47,7 @@ Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while ave
 
 [owner_report.html](owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
 
-It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python report_figures.py [export.csv]` recomputes every number the report quotes**, labelled and in the order they appear — drop in a newer export, run it, and update the figures against the output.
+It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python report_figures.py` recomputes every number the report quotes**, labelled and in the order they appear — drop a newer export into `data/exports/`, run it, and update the figures against the output. Passing a path (`python report_figures.py export.csv`) narrows it to a single raw export instead of the merged dataset.
 
 ## The owner's questions
 
@@ -133,7 +133,20 @@ jupyter notebook analysis.ipynb
 
 ## Data
 
-Order export CSVs (`OrderDetails_*.csv`) are not tracked in this repo — drop your own exports in the project root before running the notebook. Expected columns include `Amount`, `# of Guests`, `Opened`, `Closed`, `Duration (Opened to Paid)`, and `Table`.
+Order export CSVs are not tracked in this repo. **Drop each Toast pull into `data/exports/` and leave the previous ones there** — [merge_exports.py](merge_exports.py) upserts them into one continuous dataset at `data/orders_merged.csv`, which is what `artemis.load_orders()` reads when called with no argument. Pull a fresh export, re-run the notebook, and the analysis extends; nothing needs editing. Required columns are `Opened`, `Closed`, `Table`, `# of Guests`, `Discount Amount`, `Amount`, `Tip` and `Gratuity`.
+
+```bash
+python merge_exports.py --dry-run   # what a merge would do, without writing
+python merge_exports.py             # rebuild data/orders_merged.csv
+```
+
+Running it by hand is optional — `load_orders()` rebuilds the merged file itself whenever the set of exports on disk has changed. Three properties of real Toast exports shape how the merge works:
+
+- **Exports pulled at different times carry different columns.** The January pull has `Total` and `Duration (Opened to Paid)`; the two earlier ones have `Tax` and no duration. `Total = Amount + Tax + Tip + Gratuity` holds exactly on every overlapping row, so whichever of the pair is missing gets derived. Duration cannot be reconstructed — `Closed` reflects a batch POS close-out, not guest departure — so it stays null, and the merge report names any service days left with no duration data, since those are invisible to the turn-gap and occupancy layers.
+- **Toast amends orders after service.** One 5 June check reads Tip \$23.70 / closed 9:02pm in the May pull, and Tip \$47.38 / closed the following evening in the July one. Deduplicating on row content would keep both and count the order twice, so rows are matched on identity — `Opened`, `Table`, `# of Guests`, none of which Toast revises — and **the newest pull wins, field by field**. A field the newest pull doesn't carry keeps the value an earlier one supplied, which is what protects `Duration` if the report is ever reconfigured without it.
+- **Distinct orders can share an identity.** About 0.7% of rows are split checks rung in the same minute at the same table, up to three deep. Each gets an occurrence index so they survive the merge separately and still match their own earlier versions across pulls.
+
+Pull order is taken from the date range in the filename (`OrderDetails_2026_01_15-2026_07_15.csv`), falling back to file modification time. `verify_artemis.py` enforces that the merge is lossless: no order appears twice, no export's orders go missing, and revenue on single-source dates is conserved.
 
 ## Seating units
 

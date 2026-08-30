@@ -2,6 +2,26 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-08-26
+
+### Added
+- **`merge_exports.py`** — merges every Toast pull in `data/exports/` into one continuous dataset at `data/orders_merged.csv`, so pulling a fresh export extends the analysis instead of replacing it. `artemis.load_orders()` with no argument reads the merged file and rebuilds it whenever the exports on disk have changed; a manifest sidecar (`orders_merged.meta.json`) is what makes that staleness check cheap. Run it directly (`--dry-run` reports without writing) for the merge report: per-pull accounting, service-day coverage, gaps of 2+ consecutive days, and any days left with no duration data.
+- The three existing exports moved from the project root into `data/exports/`.
+
+### Methodology
+- **Schema drift between pulls is reconciled rather than ignored.** The January export carries `Total` and `Duration (Opened to Paid)`; the two earlier ones carry `Tax` and no duration — so neither older file could be loaded at all before. `Total = Amount + Tax + Tip + Gratuity` holds exactly on every overlapping row, so whichever is missing is derived. Duration cannot be reconstructed (`Closed` is a batch close-out, not guest departure) and stays null; those rows drop out of the turn-gap and occupancy layers on their own, and both the merge report and `load_orders`' summary now say how many.
+- **Orders are amended after service, so rows are matched on identity, not content.** One 5 June check appears as Tip $23.70 / closed 9:02pm in the May pull and Tip $47.38 / closed the next evening in the July one. Content-based deduplication would have kept both and double-counted it. Identity is `Opened` + `Table` + `# of Guests` — the fields Toast doesn't revise — and the newest pull wins field by field, with any field it doesn't carry falling back to the value an earlier pull supplied. That fallback is what keeps `Duration` intact if the Toast report is ever reconfigured without that column.
+- **Split checks are preserved.** ~0.7% of rows share an identity — separate checks rung the same minute at the same table, up to three deep — and are distinguished by an occurrence index ordered by check size, so they survive the merge separately and still match their own earlier versions.
+- Pull recency comes from the date range in the filename, with file mtime as a tiebreak.
+
+### Changed
+- `verify_artemis.py` no longer asserts a hardcoded `EXPECTED_ROWS = 6233`, which would have failed on every future pull. In its place are four merge invariants that hold at any dataset size: no order appears twice, the file agrees with its manifest, the merged set is current with the exports on disk, no export's orders go missing, and revenue on single-source dates is conserved.
+- `report_figures.py` and the notebook's load cell default to the merged dataset. `report_figures.py` still accepts a path to read one raw export.
+
+### Verified
+- The merge is a no-op on the current data: 6,609 merged rows and 6,233 after cleaning, identical to what the single January export produced, and `report_figures.py` output is byte-for-byte unchanged.
+- Adding a simulated later pull (447 already-known rows including one amended, plus 708 new nights) grows the merged set by exactly 708, resolves the amendment to the new value, and leaves all 18 checks passing. A simulated pull with the duration column dropped leaves duration coverage untouched at 6,600 rows.
+
 ## 2026-08-06 (Phase 3)
 
 ### Added

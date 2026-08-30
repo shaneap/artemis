@@ -5,10 +5,13 @@ template would make it worse, not better. But hand-written prose goes stale sile
 is how a report ends up quoting numbers that no longer hold.
 
 So this script does the other half: it recomputes every number the report cites, labelled and
-grouped in the order they appear. Drop a newer export in, run this, and update the figures
-against the output.
+grouped in the order they appear. Drop a newer export into `data/exports/`, run this, and
+update the figures against the output.
 
     python report_figures.py [path-to-export.csv]
+
+With no argument it reads the merged dataset -- every export pulled so far, not just the latest
+one. A path still narrows it to a single raw export.
 """
 
 import sys
@@ -18,7 +21,7 @@ import pandas as pd
 
 import artemis
 
-CSV = sys.argv[1] if len(sys.argv) > 1 else 'OrderDetails_2026_01_15-2026_07_15.csv'
+CSV = sys.argv[1] if len(sys.argv) > 1 else None  # None -> the merged dataset
 EVENT_PRICES = {'Black Duck': 1200, 'Evangeline': 900}
 DOW_ORDER = ['Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
