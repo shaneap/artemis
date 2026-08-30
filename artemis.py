@@ -12,8 +12,25 @@ Two layers live in this module:
   between two parties; the time layer reconstructs what the floor actually looked like.
 """
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+import merge_exports
+
+# --------------------------------------------------------------------------------------
+# Data location
+# --------------------------------------------------------------------------------------
+#
+# Raw Toast pulls accumulate in `data/exports/`; `merge_exports` upserts them into one
+# continuous dataset. `load_orders()` with no argument reads that merged file and rebuilds it
+# first if the exports have changed -- so pulling a fresh export and re-running is all it takes
+# for every number here to extend. Passing an explicit path still loads a single raw export.
+
+EXPORTS_DIR = merge_exports.EXPORTS_DIR
+MERGED_PATH = merge_exports.MERGED_PATH
+
 
 # --------------------------------------------------------------------------------------
 # Floor plan
@@ -153,8 +170,12 @@ MAX_PLAUSIBLE_SEATING_MINUTES = 6 * 60
 # Per-order layer
 # --------------------------------------------------------------------------------------
 
-def load_orders(path, verbose=True):
-    """Load and clean a Toast OrderDetails export.
+def load_orders(path=None, verbose=True):
+    """Load and clean Toast order data.
+
+    With no `path`, reads the merged dataset built from every export in `data/exports/`,
+    rebuilding it first if a new pull has appeared -- see `merge_exports`. A path still loads a
+    single raw export directly, which is what `report_figures.py`'s CLI argument does.
 
     Cleaning rules are lifted unchanged from the notebook; see the inline comments for the
     reasoning behind each one. Returns a dataframe with `Section`, parsed datetimes, a
@@ -163,17 +184,26 @@ def load_orders(path, verbose=True):
     The `Duration >= 15min` floor is deliberately NOT applied here -- call
     `apply_duration_floor` for that, so the censoring it causes stays visible.
     """
+    if path is None:
+        path = merge_exports.ensure_merged(verbose=verbose)
+
     df = pd.read_csv(path)
 
-    # This export is two report chunks concatenated together: the header row repeats mid-file
-    # and the two chunks' date ranges overlap by part of a day, producing exact-duplicate order
-    # rows. That stray header row (a literal 'Opened' value in the Opened column) is also why
-    # every column loads as string instead of numeric -- clean both before anything else.
+    # A raw export is often two report chunks concatenated together: the header row repeats
+    # mid-file and the two chunks' date ranges overlap by part of a day, producing
+    # exact-duplicate order rows. That stray header row (a literal 'Opened' value in the Opened
+    # column) is also why every column loads as string instead of numeric -- clean both before
+    # anything else. Both are no-ops on the merged file, which `merge_exports` has already
+    # resolved; they matter when a raw export is passed directly.
     df = df[df['Opened'] != 'Opened'].copy()
     duplicate_rows = df.duplicated().sum()
     df = df.drop_duplicates()
 
-    numeric_cols = ['# of Guests', 'Discount Amount', 'Amount', 'Tip', 'Gratuity', 'Total']
+    # Which columns a pull carries varies -- older exports have `Tax` where newer ones have
+    # `Total`, and `merge_exports` derives whichever is missing. Coerce what's actually here so
+    # a raw export of either vintage still loads.
+    numeric_cols = [c for c in ['# of Guests', 'Discount Amount', 'Amount', 'Tip', 'Gratuity',
+                                'Tax', 'Total'] if c in df.columns]
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric)
 
     # Amount is already net of any Discount Amount (confirmed: rows with a nonzero discount
@@ -206,7 +236,15 @@ def load_orders(path, verbose=True):
     # Use Toast's own Duration (Opened to Paid) rather than Closed - Opened: Closed frequently
     # reflects a late/batch POS close-out, not actual guest departure, which inflates the
     # timestamp-diff version. Duration (Opened to Paid) is a 'H:MM:SS' string.
-    df['Duration'] = pd.to_timedelta(df['Duration (Opened to Paid)']).dt.total_seconds() / 60
+    #
+    # Some Toast report configurations omit the column entirely, and it cannot be reconstructed
+    # from Closed. Those rows get a null duration and drop out of every duration-dependent
+    # layer on their own -- the >= floor, `build_occupancy`'s plausibility window, and
+    # `add_turn_gaps` via a null Paid_DT. The verbose summary below says how many.
+    if 'Duration (Opened to Paid)' in df.columns:
+        df['Duration'] = pd.to_timedelta(df['Duration (Opened to Paid)']).dt.total_seconds() / 60
+    else:
+        df['Duration'] = np.nan
 
     # When the party actually settled up -- the other half of every turn-gap calculation.
     # Nine event/catering rows have no duration at all (nobody sat anywhere), so they get a
@@ -244,6 +282,10 @@ def load_orders(path, verbose=True):
         print(f'Excluded {len(implausible)} row(s) with implausible guest counts '
               f'(> {GUEST_COUNT_SANITY_MAX}).')
         print(f'Excluded {bd4_rows} row(s) from BD4 (retired table, no longer in service).')
+        no_duration = int(df['Duration'].isna().sum())
+        if no_duration:
+            print(f'{no_duration} order(s) have no duration and are excluded from the '
+                  f'turn-gap and occupancy layers.')
         print(f'Loaded {len(df)} orders, {df["Service_Date"].nunique()} service days '
               f'({df["Service_Date"].min().date()} to {df["Service_Date"].max().date()}).')
 

@@ -7,14 +7,13 @@ the occupancy/turn-gap reconstruction.
 No test framework -- just prints PASS/FAIL and exits nonzero if anything fails.
 """
 
+import json
 import sys
 
 import pandas as pd
 
 import artemis
-
-CSV = 'OrderDetails_2026_01_15-2026_07_15.csv'
-EXPECTED_ROWS = 6233  # matches the notebook's own post-clean count
+import merge_exports
 
 results = []
 
@@ -41,10 +40,58 @@ check('no table code appears in two units', len(seen) == len(set(seen)),
       f'{len(seen)} memberships across {len(set(seen))} codes')
 
 
-df = artemis.load_orders(CSV, verbose=False)
+# --- Export merge -----------------------------------------------------------------------
+# The merged dataset grows every time a new Toast pull lands, so there is no fixed row count to
+# assert against. What must hold instead is that merging is lossless and unambiguous: no order
+# appears twice, none is dropped, and the file agrees with the manifest it was built from.
 
-check('row count matches notebook post-clean count',
-      len(df) == EXPECTED_ROWS, f'{len(df)} rows (expected {EXPECTED_ROWS})')
+merged_path = merge_exports.ensure_merged(verbose=False)
+merged = pd.read_csv(merged_path, parse_dates=merge_exports.DATETIME_COLUMNS,
+                     date_format=merge_exports.TOAST_DATETIME_FORMAT)
+meta = json.loads(merge_exports.META_PATH.read_text())
+sources = {path.name: merge_exports.read_export(path, verbose=False)[0]
+           for path in merge_exports.discover_exports()}
+
+merged_keys = merge_exports.identity_keys(merged)
+check('no order appears twice in the merged dataset',
+      len(merged_keys) == len(merged), f'{len(merged)} rows, {len(merged_keys)} distinct orders')
+
+check('merged file agrees with its manifest',
+      len(merged) == meta['merged_rows'],
+      f"{len(merged)} rows, manifest says {meta['merged_rows']}")
+
+check('merged dataset is current with the exports on disk',
+      not merge_exports.is_stale(), f'{len(sources)} export(s) in {merge_exports.EXPORTS_DIR}')
+
+# Every pull's orders must survive the merge. A newer pull may revise an order's tip or close
+# time, but it can never make one disappear.
+dropped = {name: len(merge_exports.identity_keys(frame) - merged_keys)
+           for name, frame in sources.items()}
+check('every order from every export survives into the merged dataset',
+      not any(dropped.values()),
+      ', '.join(f'{name}: {n} missing' for name, n in dropped.items()))
+
+# Revenue conservation: on a service date whose merged rows all come from one pull, the merged
+# total must equal that pull's own total. This is what would catch a merge that silently
+# double-counted an overlapping date or dropped half of one.
+merged_dates = merge_exports.service_dates(merged)
+worst_date, worst_delta = None, 0.0
+for name, frame in sources.items():
+    source_dates = merge_exports.service_dates(frame)
+    for date, source_rows in frame.groupby(source_dates):
+        on_date = merged[merged_dates == date]
+        if on_date.empty or set(on_date['Source_File']) != {name}:
+            continue
+        delta = abs(on_date['Amount'].sum() - source_rows['Amount'].sum())
+        if delta > worst_delta:
+            worst_date, worst_delta = f'{date.date()} ({name})', delta
+
+check('revenue on single-source dates is conserved through the merge',
+      worst_delta < 0.01, f'worst drift ${worst_delta:.2f}' +
+      (f' on {worst_date}' if worst_date else ' -- every date matches'))
+
+
+df = artemis.load_orders(verbose=False)
 
 # The service-day cutoff has to fall in genuinely dead time, or it splits a real night in half.
 spanning = artemis.verify_service_day_cutoff(df)
