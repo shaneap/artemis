@@ -23,7 +23,10 @@ import load_raw  # noqa: E402
 
 REAL_EXPORTS = sorted(load_raw.EXPORTS_DIR.glob("*.csv"))
 HEADER_A = ",".join(next(iter(load_raw.LAYOUTS)))
-TABLES = ("order_details_a", "order_details_b")
+TABLE_FOR = {export_type: table for export_type, table in load_raw.LAYOUTS.values()}
+TABLES = tuple(TABLE_FOR.values())
+HEADER_ITEM = ",".join(next(h for h, (t, _) in load_raw.LAYOUTS.items() if t == "ITEM"))
+HEADER_C = ",".join(next(h for h, (t, _) in load_raw.LAYOUTS.items() if t == "C"))
 
 
 class ScratchDB(unittest.TestCase):
@@ -47,7 +50,7 @@ class ScratchDB(unittest.TestCase):
                 sql.Identifier(cls.dbname)))
 
     def setUp(self):
-        self.conn.execute("TRUNCATE raw.load_log, raw.order_details_a, raw.order_details_b")
+        self.conn.execute("TRUNCATE raw.load_log, " + ", ".join(f"raw.{t}" for t in TABLES))
 
     def counts(self):
         return {t: self.conn.execute(
@@ -77,10 +80,9 @@ class RealExports(ScratchDB):
             lines = [ln for ln in source_data_lines(path) if ln]
             header = lines[0]
             expected = sum(1 for ln in lines if ln != header)   # data lines only
-            table, = self.conn.execute(
-                "SELECT CASE export_type WHEN 'A' THEN 'order_details_a' "
-                "ELSE 'order_details_b' END FROM raw.load_log WHERE source_file = %s",
-                (path.name,)).fetchone()
+            table = TABLE_FOR[self.conn.execute(
+                "SELECT export_type FROM raw.load_log WHERE source_file = %s",
+                (path.name,)).fetchone()[0]]
             stored = self.conn.execute(
                 sql.SQL("SELECT count(*) FROM {} WHERE source_file = %s").format(
                     sql.Identifier("raw", table)), (path.name,)).fetchone()[0]
@@ -96,10 +98,9 @@ class RealExports(ScratchDB):
         rng = random.Random(seed)
         for path in REAL_EXPORTS:
             lines = source_data_lines(path)
-            table, = self.conn.execute(
-                "SELECT CASE export_type WHEN 'A' THEN 'order_details_a' "
-                "ELSE 'order_details_b' END FROM raw.load_log WHERE source_file = %s",
-                (path.name,)).fetchone()
+            table = TABLE_FOR[self.conn.execute(
+                "SELECT export_type FROM raw.load_log WHERE source_file = %s",
+                (path.name,)).fetchone()[0]]
             query = sql.SQL("SELECT * FROM {} WHERE source_file = %s").format(
                 sql.Identifier("raw", table))
             with self.conn.cursor() as cur:
@@ -120,9 +121,13 @@ class RealExports(ScratchDB):
     def test_repeated_header_line_is_not_stored(self):
         load_raw.load_all(self.conn)
         for table in TABLES:
+            first_column = self.conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_schema = 'raw' "
+                "AND table_name = %s AND ordinal_position = 4", (table,)).fetchone()[0]
             n = self.conn.execute(
-                sql.SQL('SELECT count(*) FROM {} WHERE "Opened" = %s').format(
-                    sql.Identifier("raw", table)), ("Opened",)).fetchone()[0]
+                sql.SQL("SELECT count(*) FROM {} WHERE {} = %s").format(
+                    sql.Identifier("raw", table), sql.Identifier(first_column)),
+                (first_column,)).fetchone()[0]
             self.assertEqual(n, 0, table)
 
 
@@ -146,8 +151,7 @@ class SyntheticFiles(ScratchDB):
         path = self.write("broken.csv", f"{HEADER_A}\r\n{good}\r\n{bad}")
         with self.assertRaises(psycopg.Error):
             load_raw.load_file(self.conn, path)
-        self.assertEqual(self.counts(), {"order_details_a": 0, "order_details_b": 0,
-                                         "load_log": 0})
+        self.assertEqual(set(self.counts().values()), {0})
 
     def test_failed_file_does_not_block_a_later_good_load(self):
         row = "1/1/26 1:00 PM,2,O3,0,50,5,0,55,1/1/26 1:59 PM,0:59:00"
@@ -176,6 +180,36 @@ class SyntheticFiles(ScratchDB):
         b = self.write("b.csv", f"{HEADER_A}\r\n{row}\r\n")
         self.assertEqual(load_raw.load_file(self.conn, a), 1)
         self.assertIsNone(load_raw.load_file(self.conn, b))
+
+    def test_cp1252_file_is_decoded_not_rejected(self):
+        item = ("1300000013658981496,2,8/1/26 4:20 PM,8/1/26 4:10 PM,1300000013659420803,BD2,"
+                "Black Duck,,1300000013659927368,Bull\u2019s Eye,Plates,Food Menu,Food,"
+                "20.00,0.00,20.00,1.0,false")
+        path = self.write("items.csv", f"{HEADER_ITEM}\r\n{item}\r\n")
+        path.write_bytes(path.read_bytes().decode("utf-8").encode("cp1252"))
+        self.assertEqual(load_raw.load_file(self.conn, path), 1)
+        stored = self.conn.execute(
+            'SELECT "Menu Item", "Service", "Order Id" FROM raw.item_selection_details_a'
+        ).fetchone()
+        self.assertEqual(stored, ("Bull\u2019s Eye", "", "1300000013658981496"))
+
+    def test_bytes_neither_encoding_can_decode_are_refused(self):
+        path = self.tmp / "junk.csv"
+        path.write_bytes(HEADER_ITEM.encode() + b"\r\nx\x81\r\n")      # 0x81 undefined in cp1252
+        with self.assertRaises(ValueError):
+            load_raw.load_file(self.conn, path)
+        self.assertEqual(self.counts()["load_log"], 0)
+
+    def test_order_details_with_ids_lands_in_its_own_table(self):
+        row = ("1300000012687477639,1,\"9, 16\",6/30/26 12:25 PM,4,O10,0.00,100.00,8.88,"
+               "20.00,0.00,128.88,7/2/26 4:18 AM,21:05:15")
+        path = self.write("orders.csv", f"{HEADER_C}\r\n{row}\r\n")
+        self.assertEqual(load_raw.load_file(self.conn, path), 1)
+        stored = self.conn.execute(
+            'SELECT "Order Id", "Checks", "Duration (Opened to Paid)" '
+            "FROM raw.order_details_c").fetchone()
+        self.assertEqual(stored, ("1300000012687477639", "9, 16", "21:05:15"))
+        self.assertEqual(self.counts()["order_details_a"], 0)
 
     def test_blank_cells_and_exact_duplicates_are_kept_as_received(self):
         row = "1/1/26 1:00 PM,2,,0,50,5,0,55,,"

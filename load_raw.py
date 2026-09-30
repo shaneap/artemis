@@ -12,6 +12,7 @@ Connection settings come from .env / the environment (see .env.example).
 import argparse
 import csv
 import hashlib
+import io
 import os
 from pathlib import Path
 
@@ -28,6 +29,12 @@ LAYOUTS = {
      "Total", "Closed", "Duration (Opened to Paid)"): ("A", "order_details_a"),
     ("Opened", "# of Guests", "Table", "Discount Amount", "Amount", "Tax", "Tip",
      "Gratuity", "Closed"): ("B", "order_details_b"),
+    ("Order Id", "Order #", "Checks", "Opened", "# of Guests", "Table", "Discount Amount",
+     "Amount", "Tax", "Tip", "Gratuity", "Total", "Closed",
+     "Duration (Opened to Paid)"): ("C", "order_details_c"),
+    ("Order Id", "Order #", "Sent Date", "Order Date", "Check Id", "Table", "Dining Area",
+     "Service", "Item Selection Id", "Menu Item", "Menu Group", "Menu", "Sales Category",
+     "Gross Price", "Discount", "Net Price", "Qty", "Void?"): ("ITEM", "item_selection_details_a"),
 }
 
 
@@ -59,6 +66,19 @@ def file_sha256(path):
     return digest.hexdigest()
 
 
+def decode_export(raw_bytes, name):
+    """UTF-8 if the file is valid UTF-8, else Windows-1252 (the ItemSelectionDetails
+    exports are cp1252: a curly apostrophe arrives as byte 0x92). Anything neither
+    can decode is refused rather than guessed at."""
+    try:
+        return raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            return raw_bytes.decode("cp1252")
+        except UnicodeDecodeError as err:
+            raise ValueError(f"{name}: not valid UTF-8 or Windows-1252 ({err})") from err
+
+
 def read_export(path):
     """Return (header, rows) with rows as (physical_line_number, fields).
 
@@ -67,20 +87,20 @@ def read_export(path):
     data and is left out; its line number stays unused. Raises ValueError if any
     row's width differs from the header's.
     """
-    with open(path, newline="", encoding="utf-8") as fh:
-        reader = csv.reader(fh)
-        header = tuple(next(reader))
-        rows = []
-        for fields in reader:
-            if not fields:
-                continue
-            if tuple(fields) == header:
-                continue
-            if len(fields) != len(header):
-                raise ValueError(
-                    f"{Path(path).name} line {reader.line_num}: "
-                    f"{len(fields)} fields, header has {len(header)}")
-            rows.append((reader.line_num, fields))
+    text = decode_export(Path(path).read_bytes(), Path(path).name)
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header = tuple(next(reader))
+    rows = []
+    for fields in reader:
+        if not fields:
+            continue
+        if tuple(fields) == header:
+            continue
+        if len(fields) != len(header):
+            raise ValueError(
+                f"{Path(path).name} line {reader.line_num}: "
+                f"{len(fields)} fields, header has {len(header)}")
+        rows.append((reader.line_num, fields))
     return header, rows
 
 

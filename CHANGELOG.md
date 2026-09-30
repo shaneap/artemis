@@ -8,6 +8,11 @@ All notable changes to the Artemis analysis are documented here. Format loosely 
 - **Phase 1 raw layer** (nothing in the existing pipeline changed): `docker-compose.yml` (PostgreSQL 16, password from `.env`), `sql/001_schemas.sql` (`raw`/`staging`/`analytics`), `sql/002_raw_tables.sql` (`raw.load_log`, `raw.order_details_a`, `raw.order_details_b`), `load_raw.py`, and `tests/test_raw_load.py`. Every source column is stored as text under its original name, with `load_id`, `source_file` and `source_row_number` (physical line, header = 1). A file whose SHA256 is already in `raw.load_log` is skipped; otherwise the log row and all data rows commit in one transaction.
 - `docs/column_inventory.md`: audit of the raw exports (two column layouts, no order ID, key collisions).
 
+- **Exports with Toast IDs** (`sql/003_raw_tables_with_ids.sql`): `raw.order_details_c` (OrderDetails with Order Id / Order # / Checks) and `raw.item_selection_details_a` (ItemSelectionDetails: Order Id, Check Id, Item Selection Id, Table, Gross/Net Price, Qty, Void?). `load_raw.py` reads UTF-8 and falls back to Windows-1252 (ItemSelectionDetails is cp1252). Existing databases need 003 applied by hand; only a fresh volume runs it automatically.
+
+### Findings
+- On the Jun 30 - Sep 30 OrderDetails pull, Order Id is unique (3,219 of 3,219 rows); on the August ItemSelectionDetails pull, Item Selection Id is unique (5,312 of 5,312) and every item's Order Id is in OrderDetails. Per order, non-void Net Price sums to Amount exactly (1,051 of 1,051). `Order #` resets daily and is not a key. `Checks` in OrderDetails is a list of check numbers, not the Check Id. Identical item rows in one order are real repeat orders, not duplicates.
+
 ### Methodology
 - Raw keeps exact duplicate rows and blank cells (as empty strings). The one thing not stored is a line identical to the header (the 01_15 export repeats it at line 3522); its line number is simply skipped.
 
