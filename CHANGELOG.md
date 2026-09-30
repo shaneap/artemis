@@ -2,6 +2,15 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-09-30
+
+### Added
+- **Phase 1 raw layer** (nothing in the existing pipeline changed): `docker-compose.yml` (PostgreSQL 16, password from `.env`), `sql/001_schemas.sql` (`raw`/`staging`/`analytics`), `sql/002_raw_tables.sql` (`raw.load_log`, `raw.order_details_a`, `raw.order_details_b`), `load_raw.py`, and `tests/test_raw_load.py`. Every source column is stored as text under its original name, with `load_id`, `source_file` and `source_row_number` (physical line, header = 1). A file whose SHA256 is already in `raw.load_log` is skipped; otherwise the log row and all data rows commit in one transaction.
+- `docs/column_inventory.md`: audit of the raw exports (two column layouts, no order ID, key collisions).
+
+### Methodology
+- Raw keeps exact duplicate rows and blank cells (as empty strings). The one thing not stored is a line identical to the header (the 01_15 export repeats it at line 3522); its line number is simply skipped.
+
 ## 2026-08-26
 
 ### Added

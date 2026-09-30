@@ -16,3 +16,6 @@ __pycache__/
 
 # Cached weather pull (regenerated on demand)
 weather_cache.csv
+
+# Local secrets (see .env.example)
+.env

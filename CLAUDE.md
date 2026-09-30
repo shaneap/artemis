@@ -21,11 +21,12 @@ Owner-facing deliverable is `owner_report.html`.
 | --- | --- |
 | `artemis.py` | Shared pipeline. Constants (`SEATING_UNITS`, `CAPACITY_RANGES`, `RESERVATION_SECTIONS`, `SERVICE_DAY_CUTOFF_HOUR=4`, `EVENT_AMOUNT_THRESHOLD=400`, `DURATION_FLOOR_MINUTES=15`), `load_orders()`, `classify_order_type`, `apply_duration_floor`, time layer: `add_service_day`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`. Single source of truth — notebook and scripts import it. |
 | `merge_exports.py` | Upserts every `data/exports/OrderDetails_*.csv` into `data/orders_merged.csv` (+ `.meta.json` manifest). Identity = `Opened`+`Table`+`# of Guests`+occurrence index; newest pull wins field by field. `load_orders()` rebuilds it automatically when stale. |
+| `load_raw.py`, `sql/`, `docker-compose.yml`, `tests/test_raw_load.py` | Phase 1 (design decisions in `DECISIONS.md`, owned by the user — don't edit): PostgreSQL raw layer. `docker compose up -d` (creds from `.env`) runs `sql/*.sql`; `python3 load_raw.py` loads `data/exports/` as-is into `raw.order_details_a/_b`, skipping files whose SHA256 is in `raw.load_log`. Independent of the old pipeline. Tests: `python3 -m unittest tests.test_raw_load` (needs a live Postgres). |
 | `verify_artemis.py` | The test suite: 18 invariant checks, PASS/FAIL, nonzero exit on failure. ~1 s. |
 | `report_figures.py` | Recomputes every number quoted in `owner_report.html`, in document order. |
 | `weather.py` | Open-Meteo daily archive for Ronkonkoma, cached to `weather_cache.csv`; holiday calendar. |
 | `analysis.ipynb` | Narrative analysis: VPCPM/TPCPM by party size & section → turn times & utilization → owner's 7 questions → revenue by time of day / weather. |
-| `docs/column_inventory.md` | 2026-09-27 audit of the raw exports (two column layouts, duplicate rows, no order ID, key collisions). Refers to decisions D002/D008 that live outside this repo — ask the user if their content matters. |
+| `docs/column_inventory.md` | 2026-09-27 audit of the raw exports (two column layouts, duplicate rows, no order ID, key collisions). Feeds decisions D002/D008 in `DECISIONS.md`. |
 | `Artemis.Rproj`, `.Rhistory` | Leftover RStudio files; unused. |
 
 ## Commands
