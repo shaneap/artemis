@@ -85,7 +85,8 @@ def decode_export(raw_bytes, name):
 def read_export(path):
     """Return (header, rows) with rows as (physical_line_number, fields).
 
-    Line numbers count the header as line 1. A line identical to the header (the
+    Line numbers count the header as line 1; a record whose quoted cell contains a line
+    break is numbered by the line it starts on. A line identical to the header (the
     01_15 export repeats it mid-file where two report chunks were joined) is not
     data and is left out; its line number stays unused. Raises ValueError if any
     row's width differs from the header's.
@@ -94,16 +95,21 @@ def read_export(path):
     reader = csv.reader(io.StringIO(text, newline=""))
     header = tuple(next(reader))
     rows = []
-    for fields in reader:
+    while True:
+        start_line = reader.line_num + 1    # a quoted cell can span lines; record where it starts
+        try:
+            fields = next(reader)
+        except StopIteration:
+            break
         if not fields:
             continue
         if tuple(fields) == header:
             continue
         if len(fields) != len(header):
             raise ValueError(
-                f"{Path(path).name} line {reader.line_num}: "
+                f"{Path(path).name} line {start_line}: "
                 f"{len(fields)} fields, header has {len(header)}")
-        rows.append((reader.line_num, fields))
+        rows.append((start_line, fields))
     return header, rows
 
 

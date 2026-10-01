@@ -6,6 +6,7 @@ connection settings as load_raw.py; the role must be allowed to CREATE DATABASE.
 The exports in data/exports/ are gitignored, so the tests that use them skip if absent.
 """
 import csv
+import io
 import random
 import shutil
 import sys
@@ -59,14 +60,29 @@ class ScratchDB(unittest.TestCase):
             for t in (*TABLES, "load_log")}
 
 
-def source_data_lines(path):
-    """Independent of load_raw: physical lines of the file, split on the raw bytes."""
+def source_text(path):
+    """Independent of load_raw: decode the file's bytes (UTF-8, else Windows-1252)."""
     data = Path(path).read_bytes()
     try:
-        text = data.decode("utf-8")
+        return data.decode("utf-8")
     except UnicodeDecodeError:
-        text = data.decode("cp1252")
-    return text.replace("\r\n", "\n").split("\n")
+        return data.decode("cp1252")
+
+
+def source_records(path):
+    """(header, [(start_line, fields)]) with header = line 1. A record whose quoted cell
+    contains a line break is numbered by the line it starts on."""
+    reader = csv.reader(io.StringIO(source_text(path), newline=""))
+    header = next(reader)
+    out = []
+    while True:
+        start = reader.line_num + 1
+        try:
+            fields = next(reader)
+        except StopIteration:
+            return header, out
+        if fields and fields != header:
+            out.append((start, fields))
 
 
 @unittest.skipUnless(REAL_EXPORTS, "no exports in data/exports/")
@@ -82,9 +98,7 @@ class RealExports(ScratchDB):
     def test_row_counts_match_source_files(self):
         load_raw.load_all(self.conn)
         for path in REAL_EXPORTS:
-            lines = [ln for ln in source_data_lines(path) if ln]
-            header = lines[0]
-            expected = sum(1 for ln in lines if ln != header)   # data lines only
+            expected = len(source_records(path)[1])   # data records, not physical lines
             table = TABLE_FOR[self.conn.execute(
                 "SELECT export_type FROM raw.load_log WHERE source_file = %s",
                 (path.name,)).fetchone()[0]]
@@ -102,7 +116,7 @@ class RealExports(ScratchDB):
         seed = random.randrange(1 << 30)
         rng = random.Random(seed)
         for path in REAL_EXPORTS:
-            lines = source_data_lines(path)
+            records = dict(source_records(path)[1])    # start line -> fields
             table = TABLE_FOR[self.conn.execute(
                 "SELECT export_type FROM raw.load_log WHERE source_file = %s",
                 (path.name,)).fetchone()[0]]
@@ -117,8 +131,7 @@ class RealExports(ScratchDB):
                                             max(rows, key=lambda r: r[2])]
             for row in picks:
                 record = dict(zip(names, row))
-                line = lines[record["source_row_number"] - 1]
-                fields = next(csv.reader([line]))
+                fields = records[record["source_row_number"]]
                 stored = [record[c] for c in names[3:]]
                 self.assertEqual(stored, fields,
                                  f"{path.name} line {record['source_row_number']} (seed {seed})")
@@ -226,6 +239,15 @@ class SyntheticFiles(ScratchDB):
             "FROM raw.order_details_c").fetchone()
         self.assertEqual(stored, ("1300000012687477639", "9, 16", "21:05:15"))
         self.assertEqual(self.counts()["order_details_a"], 0)
+
+    def test_record_with_a_line_break_in_a_cell_is_numbered_by_its_first_line(self):
+        a = "1/1/26 1:00 PM,2,O3,0,50,5,0,55,1/1/26 1:59 PM,0:59:00"
+        multi = '1/1/26 2:00 PM,"2",O3,0,"Two\r\nLines",5,0,55,1/1/26 2:59 PM,0:59:00'
+        path = self.write("multiline.csv", f"{HEADER_A}\r\n{a}\r\n{multi}\r\n{a}\r\n")
+        self.assertEqual(load_raw.load_file(self.conn, path), 3)
+        rows = self.conn.execute(
+            'SELECT source_row_number, "Amount" FROM raw.order_details_a ORDER BY 1').fetchall()
+        self.assertEqual(rows, [(2, "50"), (3, "Two\r\nLines"), (5, "50")])
 
     def test_blank_cells_and_exact_duplicates_are_kept_as_received(self):
         row = "1/1/26 1:00 PM,2,,0,50,5,0,55,,"
