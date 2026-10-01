@@ -35,6 +35,9 @@ LAYOUTS = {
     ("Order Id", "Order #", "Sent Date", "Order Date", "Check Id", "Table", "Dining Area",
      "Service", "Item Selection Id", "Menu Item", "Menu Group", "Menu", "Sales Category",
      "Gross Price", "Discount", "Net Price", "Qty", "Void?"): ("ITEM", "item_selection_details_a"),
+    ("Order Id", "Order #", "Sent Date", "Order Date", "Check Id", "Table", "Dining Area",
+     "Item Selection Id", "Menu Item", "Menu Group", "Menu", "Sales Category",
+     "Gross Price", "Discount", "Net Price", "Qty", "Void?"): ("ITEM_B", "item_selection_details_b"),
 }
 
 

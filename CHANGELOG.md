@@ -10,7 +10,10 @@ All notable changes to the Artemis analysis are documented here. Format loosely 
 
 - **Exports with Toast IDs** (`sql/003_raw_tables_with_ids.sql`): `raw.order_details_c` (OrderDetails with Order Id / Order # / Checks) and `raw.item_selection_details_a` (ItemSelectionDetails: Order Id, Check Id, Item Selection Id, Table, Gross/Net Price, Qty, Void?). `load_raw.py` reads UTF-8 and falls back to Windows-1252 (ItemSelectionDetails is cp1252). Existing databases need 003 applied by hand; only a fresh volume runs it automatically.
 
+- `sql/004_raw_item_selection_details_b.sql`: ItemSelectionDetails layout without the always-blank `Service` column, which is what the 2026 re-export uses (`item_selection_details_a`, with Service, is now unused). `load_raw.py` and its tests cover it.
+
 ### Findings
+- **Full 2026 re-export (Jan 1 - Sep 30), loaded into raw:** 9,985 order rows = 9,923 distinct Order Ids; 53,033 item rows = 51,571 distinct Item Selection Ids. Every repeat comes from two adjacent files both containing their shared boundary date, and every repeated pair is identical, so staging can keep one copy per ID. After that, non-void item Net Price sums to Amount on all 9,508 orders that have items; the 342 orders with no items are all $0. The one item order missing from OrderDetails was opened 9/30 4:17 PM, after the Order Details pull. Service days with no orders are Mondays plus a few holidays/closures (1/25-26, 2/22-23, 4/5-6, 7/4), the same gaps the old merge report showed, so no sign of a missing export.
 - On the Jun 30 - Sep 30 OrderDetails pull, Order Id is unique (3,219 of 3,219 rows); on the August ItemSelectionDetails pull, Item Selection Id is unique (5,312 of 5,312) and every item's Order Id is in OrderDetails. Per order, non-void Net Price sums to Amount exactly (1,051 of 1,051). `Order #` resets daily and is not a key. `Checks` in OrderDetails is a list of check numbers, not the Check Id. Identical item rows in one order are real repeat orders, not duplicates.
 
 ### Methodology

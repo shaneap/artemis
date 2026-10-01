@@ -26,6 +26,7 @@ HEADER_A = ",".join(next(iter(load_raw.LAYOUTS)))
 TABLE_FOR = {export_type: table for export_type, table in load_raw.LAYOUTS.values()}
 TABLES = tuple(TABLE_FOR.values())
 HEADER_ITEM = ",".join(next(h for h, (t, _) in load_raw.LAYOUTS.items() if t == "ITEM"))
+HEADER_ITEM_B = ",".join(next(h for h, (t, _) in load_raw.LAYOUTS.items() if t == "ITEM_B"))
 HEADER_C = ",".join(next(h for h, (t, _) in load_raw.LAYOUTS.items() if t == "C"))
 
 
@@ -60,7 +61,11 @@ class ScratchDB(unittest.TestCase):
 
 def source_data_lines(path):
     """Independent of load_raw: physical lines of the file, split on the raw bytes."""
-    text = Path(path).read_bytes().decode("utf-8")
+    data = Path(path).read_bytes()
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp1252")
     return text.replace("\r\n", "\n").split("\n")
 
 
@@ -192,6 +197,17 @@ class SyntheticFiles(ScratchDB):
             'SELECT "Menu Item", "Service", "Order Id" FROM raw.item_selection_details_a'
         ).fetchone()
         self.assertEqual(stored, ("Bull\u2019s Eye", "", "1300000013658981496"))
+
+    def test_item_export_without_service_column_lands_in_its_own_table(self):
+        item = ("1300000013658981496,2,8/1/26 4:20 PM,8/1/26 4:10 PM,1300000013659420803,BD2,"
+                "Black Duck,1300000013659927368,Meatsticks,Plates,Food Menu,Food,"
+                "20.00,0.00,20.00,1.0,false")
+        path = self.write("items_b.csv", f"{HEADER_ITEM_B}\r\n{item}\r\n")
+        self.assertEqual(load_raw.load_file(self.conn, path), 1)
+        self.assertEqual(self.conn.execute(
+            'SELECT "Item Selection Id", "Menu Item" FROM raw.item_selection_details_b'
+        ).fetchone(), ("1300000013659927368", "Meatsticks"))
+        self.assertEqual(self.counts()["item_selection_details_a"], 0)
 
     def test_bytes_neither_encoding_can_decode_are_refused(self):
         path = self.tmp / "junk.csv"
