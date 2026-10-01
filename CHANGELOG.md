@@ -2,6 +2,18 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-01
+
+### Added
+- **Staging layer** (`sql/005_staging.sql`): views `staging.orders` and `staging.item_selections`, one row per Order Id / Item Selection Id (copy from the most recent load wins; `copies_in_raw` says how many there were). Types converted (IDs bigint, money numeric, Toast timestamps parsed without time-zone dependence, durations to intervals), blanks to NULL, `Checks` to an int array, `service_date` with the 4 am cutoff. D009: `is_long_session` (duration strictly over 6 h), `is_negative_duration`, and `duration_usable` for time metrics. Views, not tables, so a rule change is re-running the file (D010).
+- `tests/test_staging.py`: edge cases (12 AM, 4 am cutoff, 6:00:00 vs 6:00:01, negative and blank durations, newest-load-wins, both item layouts) and invariants on the real exports (one row per ID, every timestamp parses, item Net Price reconciles to Amount, Total = Amount + Tax + Tip + Gratuity).
+- Aug 31, 2025 item export loaded; every order with a nonzero Amount now has item rows.
+
+### Findings
+- 20,964 orders (Apr 25, 2025 - Sep 29, 2026), 106,241 item selections. Durations: 448 over 6 h (113 over 24 h), 9 negative (all $0 untabled morning tickets closed weeks later), 6 blank; 20,501 usable.
+- `Gross Price` is a unit price: Gross x Qty - Discount = Net on 94,281 item rows; the other 2,815 are items split across checks (Net = half). Net Price is the figure that reconciles. Qty can be 0.5 (half pours).
+- **The floor plan changed:** `E4`/`E5` were last used 2025-11-23 and `BD4` 2026-02-13, so table-to-unit mapping needs dates (D007).
+
 ## 2026-09-30
 
 ### Added
