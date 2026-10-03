@@ -7,6 +7,9 @@ raw.load_log is skipped; any other file is stored in a single transaction -- the
 log row and every data row commit together or not at all. Nothing is converted,
 trimmed or de-duplicated; a blank cell is stored as the empty string.
 
+If anything new was loaded, staging and analytics are then refreshed from raw
+(sql/maintenance/refresh.sql); --no-refresh skips that.
+
 Connection settings come from .env / the environment (see .env.example).
 """
 import argparse
@@ -21,6 +24,7 @@ from psycopg import sql
 
 ROOT = Path(__file__).resolve().parent
 EXPORTS_DIR = ROOT / "data" / "exports"
+REFRESH_SQL = ROOT / "sql" / "maintenance" / "refresh.sql"
 
 # Export layouts: exact header -> (export_type, raw table). A header that matches
 # none of these is refused rather than guessed at; a new layout needs a new table.
@@ -157,13 +161,24 @@ def load_all(conn, exports_dir=EXPORTS_DIR):
     return loaded, skipped, inserted
 
 
+def refresh_models(conn):
+    """Re-derive the staging and analytics materialized views from raw."""
+    conn.execute(REFRESH_SQL.read_text())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--exports-dir", default=EXPORTS_DIR, type=Path)
+    parser.add_argument("--no-refresh", action="store_true",
+                        help="don't refresh staging/analytics after loading")
     args = parser.parse_args()
     # autocommit: each file's conn.transaction() is then a real commit boundary.
     with psycopg.connect(**connect_kwargs(), autocommit=True) as conn:
-        load_all(conn, args.exports_dir)
+        loaded, _, _ = load_all(conn, args.exports_dir)
+        if loaded and not args.no_refresh:
+            print("refreshing staging and analytics ...")
+            refresh_models(conn)
+            print("done")
 
 
 if __name__ == "__main__":

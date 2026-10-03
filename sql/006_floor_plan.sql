@@ -1,7 +1,8 @@
 -- Floor plan over time (D007) and the combined-table fix (D010).
 --
 -- Two hand-maintained reference tables, then a view that decides where each order sat.
--- Re-running this file rewrites the reference rows, so edit the INSERTs and re-run.
+-- To change the floor plan, edit the INSERTs and run sql/maintenance/rebuild.sql (which
+-- re-runs this file and everything built on it).
 --
 -- Dates are service dates; valid_from inclusive, valid_to exclusive, NULL = still current.
 -- Sources:
@@ -120,11 +121,13 @@ $$;
 --     'table'          party fits the table code alone
 --     'combination'    fits a listed combination containing the code
 --     'whole_room'     fits only a whole-room buy-out (Black Duck / Evangeline)
---     'over_capacity'  bigger than every option; unit = whole room if there is one
+--     'over_capacity'  bigger than every option; unit = the largest option (whole room if
+--                      there is one, else the table itself)
 --     'bar'            bar stool or standing placeholder (walk-up; not assessed)
 --     'no_table'       no table code (to-go, events rung without a table)
 --     'unknown_table'  code not on the floor plan for that day
-CREATE OR REPLACE VIEW staging.order_seating AS
+DROP MATERIALIZED VIEW IF EXISTS staging.order_seating CASCADE;
+CREATE MATERIALIZED VIEW staging.order_seating AS
 SELECT
     o.order_id, o.service_date, o.table_code, o.guests,
     t.section,
@@ -140,12 +143,12 @@ SELECT
     CASE
         WHEN t.table_code IS NULL OR t.section = 'Bar' THEN NULL
         WHEN o.guests <= t.seats_max                 THEN o.table_code
-        ELSE COALESCE(c.combination, w.combination, r.combination)
+        ELSE COALESCE(c.combination, w.combination, r.combination, o.table_code)
     END                                                   AS seating_unit,
     CASE
         WHEN t.table_code IS NULL OR t.section = 'Bar' THEN NULL
         WHEN o.guests <= t.seats_max                 THEN t.seats_max
-        ELSE COALESCE(c.seats, w.seats, r.seats)
+        ELSE COALESCE(c.seats, w.seats, r.seats, t.seats_max)
     END                                                   AS unit_seats,
     staging.guests_implausible(o.guests, t.section)       AS guests_implausible
 FROM staging.orders o
@@ -170,3 +173,5 @@ LEFT JOIN LATERAL (   -- the largest option there is, for parties that fit nothi
       AND o.service_date >= fc.valid_from AND (fc.valid_to IS NULL OR o.service_date < fc.valid_to)
     ORDER BY fc.seats DESC LIMIT 1
 ) r ON true;
+
+CREATE UNIQUE INDEX ON staging.order_seating (order_id);

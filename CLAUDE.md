@@ -21,7 +21,7 @@ Owner-facing deliverable is `owner_report.html`.
 | --- | --- |
 | `artemis.py` | Shared pipeline. Constants (`SEATING_UNITS`, `CAPACITY_RANGES`, `RESERVATION_SECTIONS`, `SERVICE_DAY_CUTOFF_HOUR=4`, `EVENT_AMOUNT_THRESHOLD=400`, `DURATION_FLOOR_MINUTES=15`), `load_orders()`, `classify_order_type`, `apply_duration_floor`, time layer: `add_service_day`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`. Single source of truth — notebook and scripts import it. |
 | `merge_exports.py` | Upserts every `data/exports/OrderDetails_*.csv` into `data/orders_merged.csv` (+ `.meta.json` manifest). Identity = `Opened`+`Table`+`# of Guests`+occurrence index; newest pull wins field by field. `load_orders()` rebuilds it automatically when stale. |
-| `load_raw.py`, `sql/`, `docker-compose.yml`, `tests/` | New warehouse (design decisions in `DECISIONS.md`, owned by the user — don't edit; when talking to the user, describe decisions in words, not by ID). PostgreSQL via `docker compose up -d` (creds from `.env`; docker CLI is at `/Applications/Docker.app/Contents/Resources/bin`, not on PATH; start Docker Desktop with `open -a Docker`). `python3 load_raw.py` loads `data/exports/` as-is into `raw.order_details_c` and `raw.item_selection_details_b` (also `_a/_b` legacy layouts; UTF-8 or cp1252), skipping files whose SHA256 is in `raw.load_log`. Order Id / Item Selection Id are the keys; adjacent exports overlap on their boundary date. Staging = views in `sql/005_staging.sql` (`staging.orders`, `staging.item_selections`): one row per ID, the export whose date range ends latest wins; typed; `service_date` 4 am cutoff; long/negative-duration flags + `duration_usable`. `sql/006_floor_plan.sql`: dated `staging.floor_plan_tables` / `staging.floor_plan_combinations` (hand-maintained INSERTs; old layout until 11/24/25 for Evangeline and 2/14/26 for Black Duck) and view `staging.order_seating` (`seating_fit`, `seating_unit`, `unit_seats`, `guests_implausible`): a party bigger than its table gets the smallest listed combination, then the whole room. Re-apply a changed view with `docker compose exec -T db psql -U artemis -d artemis -f - < sql/005_staging.sql`. Tests: `python3 -m unittest tests.test_raw_load tests.test_staging` (scratch DBs; needs Postgres up). Independent of the old pipeline, which the user has set aside. |
+| `load_raw.py`, `sql/`, `docker-compose.yml`, `tests/` | The new PostgreSQL warehouse — see **Warehouse** below. |
 | `verify_artemis.py` | The test suite: 18 invariant checks, PASS/FAIL, nonzero exit on failure. ~1 s. |
 | `report_figures.py` | Recomputes every number quoted in `owner_report.html`, in document order. |
 | `weather.py` | Open-Meteo daily archive for Ronkonkoma, cached to `weather_cache.csv`; holiday calendar. |
@@ -39,6 +39,36 @@ python3 merge_exports.py --dry-run   # merge report without writing
 python3 report_figures.py            # figures for the owner report
 python3 -m jupyter nbconvert --to notebook --execute --inplace analysis.ipynb   # re-run notebook
 ```
+
+## Warehouse (the current direction; the old pandas pipeline is set aside)
+
+- **Decisions** live in `DECISIONS.md` (owned by the user — don't edit). When talking to the
+  user, describe a decision in words, never by its D-number. Unanswered questions for the user
+  are in `OPEN_QUESTIONS.md` (gitignored, private); add to it rather than to the README.
+- **Run:** Docker Desktop (`open -a Docker`; CLI at `/Applications/Docker.app/Contents/Resources/bin`,
+  not on PATH), `docker compose up -d` (creds in `.env`). `python3 load_raw.py` loads new files
+  from `data/exports/` and refreshes staging + analytics (~6 s). After editing rules in
+  `sql/005-007`: `docker compose exec -T db psql -U artemis -d artemis -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/maintenance/rebuild.sql`.
+  Tests: `python3 -m unittest tests.test_raw_load tests.test_staging tests.test_analytics`
+  (scratch DBs, ~20 s; unittest, not pytest).
+- **Exports:** Toast `OrderDetails` (3-month files) and `ItemSelectionDetails` (monthly), Apr 25,
+  2025 onward, with Order Id / Check Id / Item Selection Id. Item files are Windows-1252.
+  Adjacent files overlap on their boundary date.
+- **raw** (`sql/002-004`): files as received, all TEXT, `raw.load_log` by SHA256. Live tables:
+  `order_details_c`, `item_selection_details_b`; `_a/_b`/`item_..._a` are legacy layouts.
+- **staging** (`sql/005-006`, materialized views — plain views made the planner pick a
+  2-billion-row join): `orders`, `item_selections` (one row per ID; the export whose date range
+  ends latest wins; typed; `service_date` 4 am cutoff; long/negative-duration flags,
+  `duration_usable`), dated floor plan `floor_plan_tables` / `floor_plan_combinations`
+  (hand-maintained INSERTs; old layout until 11/24/25 Evangeline, 2/14/26 Black Duck), and
+  `order_seating` (party → own table, smallest listed combination, whole room, or
+  `over_capacity`; `guests_implausible` over 30, or over 12 at the bar).
+- **analytics** (`sql/007`, materialized views): `dim_date`, `dim_seating_unit`, `dim_menu_item`
+  (price versions inferred from the dominant monthly price of clean Qty-1 sales; identity is the
+  item name), `fact_order` (order type, VPCPM/TPCPM per order when seated, 15 min–6 h, real
+  guests), `fact_item_selection`. Aggregation (geometric means, shrinkage) belongs in analysis
+  scripts/notebooks on top of these.
+- Net Price is the line total and sums to the order's Amount; Gross Price is a unit price.
 
 ## Domain model (the non-obvious parts)
 

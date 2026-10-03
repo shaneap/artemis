@@ -38,6 +38,7 @@ class FileLoading(ScratchDB):
         path = self.tmp / name
         path.write_text(header + "\r\n" + "\r\n".join(rows) + "\r\n")
         load_raw.load_file(self.conn, path)
+        load_raw.refresh_models(self.conn)
 
     def order(self, order_id="1300000000000000001"):
         cur = self.conn.execute("SELECT * FROM staging.orders WHERE order_id = %s", (order_id,))
@@ -155,8 +156,8 @@ class SeatingRules(FileLoading):
             ("3/1/26 7:00 PM", "BD2", 10, ("whole_room", "Black Duck (whole room)", 14, False)),
             ("3/1/26 7:00 PM", "BD2", 16, ("over_capacity", "Black Duck (whole room)", 14, False)),
             ("3/1/26 7:00 PM", "O6", 2, ("table", "O6", 2, False)),
-            ("3/1/26 7:00 PM", "O6", 3, ("over_capacity", None, None, False)),    # O6 never combines
-            ("3/1/26 7:00 PM", "O6", 40, ("over_capacity", None, None, True)),
+            ("3/1/26 7:00 PM", "O6", 3, ("over_capacity", "O6", 2, False)),    # O6 never combines
+            ("3/1/26 7:00 PM", "O6", 40, ("over_capacity", "O6", 2, True)),
             ("3/1/26 7:00 PM", "B1", 2, ("bar", None, None, False)),
             ("3/1/26 7:00 PM", "B1", 13, ("bar", None, None, True)),
             ("3/1/26 7:00 PM", "", 4, ("no_table", None, None, False)),
@@ -169,6 +170,7 @@ class StagingOnRealExports(ScratchDB):
     def setUpClass(cls):
         super().setUpClass()
         load_raw.load_all(cls.conn)
+        load_raw.refresh_models(cls.conn)
 
     def setUp(self):
         pass    # keep the loaded data across tests in this class

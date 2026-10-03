@@ -1,6 +1,8 @@
 -- Staging layer (D003, D009, D010, D011): one row per Toast ID, typed, with data-quality
--- flags. These are views over raw, so changing a rule here and re-running this file
--- "rebuilds" staging; raw is never touched.
+-- flags. Materialized views over raw: refreshed after every load (load_raw.py does it), and
+-- to change a rule, edit it and run sql/maintenance/rebuild.sql. Raw is never touched.
+-- (Stored rather than plain views so PostgreSQL knows the real row counts; as plain views the
+-- de-duplication fooled the planner into a 2-billion-comparison join.)
 --
 -- Which copy wins: Order Id / Item Selection Id repeat across exports (adjacent pulls share
 -- their boundary date, and re-pulls repeat everything). The copy from the export whose date
@@ -13,33 +15,38 @@
 -- Toast writes local wall-clock times as 'M/D/YY H:MM AM'. Parsed into a timestamp with no
 -- time zone, independent of the session's TimeZone/DateStyle settings.
 CREATE OR REPLACE FUNCTION staging.parse_toast_ts(t TEXT) RETURNS TIMESTAMP
-LANGUAGE sql IMMUTABLE STRICT AS $$
-    SELECT make_timestamp(
-        2000 + m[3]::int, m[1]::int, m[2]::int,
-        (m[4]::int % 12) + CASE WHEN m[6] = 'PM' THEN 12 ELSE 0 END,
-        m[5]::int, 0)
-    FROM (SELECT regexp_match(t, '^(\d{1,2})/(\d{1,2})/(\d{2}) (\d{1,2}):(\d{2}) (AM|PM)$') AS m) x
-    WHERE m IS NOT NULL
+LANGUAGE sql IMMUTABLE AS $$
+    -- a single expression, so PostgreSQL inlines it (much faster than a per-row call);
+    -- anything not in the expected format comes back NULL
+    SELECT CASE WHEN t ~ '^\d{1,2}/\d{1,2}/\d{2} \d{1,2}:\d{2} (AM|PM)$' THEN make_timestamp(
+        2000 + split_part(split_part(t, ' ', 1), '/', 3)::int,
+        split_part(t, '/', 1)::int,
+        split_part(t, '/', 2)::int,
+        (split_part(split_part(t, ' ', 2), ':', 1)::int % 12)
+            + CASE WHEN split_part(t, ' ', 3) = 'PM' THEN 12 ELSE 0 END,
+        split_part(split_part(t, ' ', 2), ':', 2)::int,
+        0) END
 $$;
 
 -- 'H:MM:SS' with any number of hours ('147:09:50'). Toast writes negative durations with
 -- every part negative ('-378:-17:-58'); those parse to a negative interval.
 CREATE OR REPLACE FUNCTION staging.parse_toast_duration(t TEXT) RETURNS INTERVAL
-LANGUAGE sql IMMUTABLE STRICT AS $$
-    SELECT make_interval(hours => m[1]::int, mins => m[2]::int, secs => m[3]::int)
-    FROM (SELECT regexp_match(t, '^(-?\d+):(-?\d{1,2}):(-?\d{1,2})$') AS m) x
-    WHERE m IS NOT NULL
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN t ~ '^-?\d+:-?\d{1,2}:-?\d{1,2}$' THEN make_interval(
+        hours => split_part(t, ':', 1)::int,
+        mins  => split_part(t, ':', 2)::int,
+        secs  => split_part(t, ':', 3)::int) END
 $$;
 
 -- End date of an export's range, from its Toast file name; NULL if the name doesn't match.
 CREATE OR REPLACE FUNCTION staging.export_end_date(source_file TEXT) RETURNS DATE
-LANGUAGE sql IMMUTABLE STRICT AS $$
-    SELECT make_date(m[1]::int, m[2]::int, m[3]::int)
-    FROM (SELECT regexp_match(source_file, '_\d{4}_\d{2}_\d{2}-(\d{4})_(\d{2})_(\d{2})\.csv$') AS m) x
-    WHERE m IS NOT NULL
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN source_file ~ '_\d{4}_\d{2}_\d{2}-\d{4}_\d{2}_\d{2}\.csv$'
+        THEN to_date(substring(source_file FROM '-(\d{4}_\d{2}_\d{2})\.csv$'), 'YYYY_MM_DD') END
 $$;
 
-CREATE OR REPLACE VIEW staging.orders AS
+DROP MATERIALIZED VIEW IF EXISTS staging.orders CASCADE;
+CREATE MATERIALIZED VIEW staging.orders AS
 WITH ranked AS (
     SELECT r.*,
            row_number() OVER (PARTITION BY "Order Id"
@@ -81,7 +88,10 @@ SELECT
     load_id, source_file, source_row_number, copies_in_raw
 FROM typed;
 
-CREATE OR REPLACE VIEW staging.item_selections AS
+CREATE UNIQUE INDEX ON staging.orders (order_id);
+
+DROP MATERIALIZED VIEW IF EXISTS staging.item_selections CASCADE;
+CREATE MATERIALIZED VIEW staging.item_selections AS
 WITH unioned AS (
     -- both ItemSelectionDetails layouts; the _a layout's extra "Service" column was always blank
     SELECT load_id, source_file, source_row_number, "Order Id", "Order #", "Sent Date",
@@ -124,3 +134,6 @@ SELECT
     load_id, source_file, source_row_number, copies_in_raw
 FROM ranked
 WHERE copy_rank = 1;
+
+CREATE UNIQUE INDEX ON staging.item_selections (item_selection_id);
+CREATE INDEX ON staging.item_selections (order_id);

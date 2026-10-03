@@ -2,6 +2,21 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-04
+
+### Added
+- **Analytics layer** (`sql/007_analytics.sql`): `dim_date`, `dim_seating_unit` (tables, combinations and whole rooms per layout period), `dim_menu_item` (menu price history: one row per item per price version), `fact_order` (one row per order, with Seated / Event-Catering / To-Go by the old rule and per-order VPCPM/TPCPM when seated with a 15 min - 6 h duration and a plausible guest count) and `fact_item_selection` (one row per item selection, pointing at the price version in force that day). `tests/test_analytics.py` covers the price-version rules, order types, the metric rules and real-data invariants (every row and dollar carried through, versions contiguous).
+- **Menu price history is inferred**, because Toast doesn't export the price list: a month sets an item's price when one price is more than half of its clean sales (not void, Qty 1, not split), the version starts at the first sale at that price, low sellers use their overall dominant price, open-price items get none. 1,748 items, 2,029 versions; 182 items changed price; 91.8% of clean sales were rung at their version's price.
+- `sql/maintenance/refresh.sql` (run by `load_raw.py` after any new load; `--no-refresh` to skip) and `sql/maintenance/rebuild.sql` (after changing a rule).
+
+### Changed
+- **Staging is now materialized** (`staging.orders`, `staging.item_selections`, `staging.order_seating`). As plain views, the planner thought de-duplication left ~200 rows instead of 106,000 and chose a 2.2-billion-comparison join (96 s). Toast timestamp/duration parsing was also rewritten as inlinable expressions. Full refresh is now ~6 s.
+- Over-capacity parties on tables with no combination (the O3/O6 2-tops) are placed on the table itself instead of no unit.
+
+### Findings
+- **The opening menu was rung tax-inclusive.** Until about Jun 5, 2025, many drinks rang at e.g. $16.58 / $17.49, which are $18 / $19 with Suffolk tax (8.625%) backed out; afterwards $18 / $19 plus tax, so net revenue per drink rose ~8.6% at that point.
+- Revenue Apr 25 - Dec 31, 2025: $1.12M (11,041 orders); Jan 2 - Sep 29, 2026: $1.16M (9,923). Liquor is 66% of item net sales, food 16%; $133K (5.8%) of item sales have no sales category.
+
 ## 2026-10-03
 
 ### Changed
