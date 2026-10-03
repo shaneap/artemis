@@ -19,3 +19,6 @@ weather_cache.csv
 
 # Local secrets (see .env.example)
 .env
+
+# Private project notes
+OPEN_QUESTIONS.md
