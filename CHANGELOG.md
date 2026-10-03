@@ -2,6 +2,20 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-05
+
+### Added
+- `analysis/` with `db.py` (warehouse → pandas, nightly frame with weather) and three scripts writing `analysis/results/*.md`: `trend.py`, `hours.py`, `menu.py`. Weather cache extended to Apr 25, 2025 - Sep 29, 2026.
+
+### Findings
+- **The decline vs. seasonality question is now answerable, and the answer is both.** Winter is the strong season (Nov-Feb $5,600-5,900 regular revenue per night vs. $3,700-4,800 in summer), so much of the Jan-Jul 2026 fall was seasonal. But comparing the same months, May-Sep 2026 vs 2025: regular revenue per night -10%, **parties per night -16%** (44.4 → 37.5), spend per guest +8%. After allowing for day of week and season: parties -14% a year (95%: -19% to -8%); revenue -6% to -12% a year depending on the model, with the intervals including zero for some specifications. Time and temperature now correlate r = 0.02 (was 0.90), so this is no longer confounded. September 2026 roughly matched September 2025 (+1.5%), one month only.
+- **Opening hours (latest full year, seated trade):** 4-5pm earns $78-98 a night Tue-Thu; midnight-1am earns $27-51 Tue/Wed and $12 Sunday, and Sunday 11pm-midnight $116. Fri/Sat earn ~$580-670 after midnight. The old suggestions (open 5pm Tue-Thu, close midnight Tue/Wed/Sun, leave Fri/Sat) hold over a full year.
+- **Spend per guest rose through mix, not prices:** May-Sep items per guest flat (2.19); net price per item +7.9%, but like-for-like the same items cost only +2.0% more. Food items per guest +14%. 58 of 281 inferred price changes are the early-June 2025 switch from tax-inclusive to tax-added pricing.
+- **Menu (latest full year):** liquor 65.5% of item sales, food 16.9%; top 20 items 40%. $108K (6.7%) has no sales category: party/event deposits ("Party", "Party $150 PP"), lockers, Open Food and balance payments rung as items. Memberships $55K.
+
+### Methodology
+- Some inferred price versions are noise rather than real changes, e.g. Grey Goose "$11.97 → $21" and a well tequila alternating $15/$18: different pours or promotions rung under one item name. Treat single price changes as indicative; the like-for-like comparison uses average realised price per unit instead.
+
 ## 2026-10-04
 
 ### Added

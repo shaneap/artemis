@@ -69,6 +69,10 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace analysis.ipynb   
   guests), `fact_item_selection`. Aggregation (geometric means, shrinkage) belongs in analysis
   scripts/notebooks on top of these.
 - Net Price is the line total and sums to the order's Amount; Gross Price is a unit price.
+- **Analysis** lives in `analysis/` (see its README): scripts using `analysis/db.py`
+  (`query()`, `nightly()` with weather), writing `analysis/results/*.md`. Mondays are closed
+  (private bookings only) and left out of trend/hours work; untabled event/to-go checks are
+  rung in the morning, so hour-of-night analysis uses seated trade only.
 
 ## Domain model (the non-obvious parts)
 
