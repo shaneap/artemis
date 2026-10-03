@@ -26,7 +26,9 @@ def item_row(item_id, order_id="1300000000000000001", net="50.00", void="false",
             f"{service}{item_id},Burger,Plates,Food Menu,Food,{net},0.00,{net},{qty},{void}")
 
 
-class StagingRules(ScratchDB):
+class FileLoading(ScratchDB):
+    """Writes small synthetic exports into a temp dir and loads them."""
+
     def setUp(self):
         super().setUp()
         self.tmp = Path(tempfile.mkdtemp())
@@ -42,6 +44,9 @@ class StagingRules(ScratchDB):
         names = [d.name for d in cur.description]
         row = cur.fetchone()
         return dict(zip(names, row)) if row else None
+
+
+class StagingRules(FileLoading):
 
     def test_without_dated_file_names_the_newest_load_wins(self):
         self.load("old.csv", HEADER_C, order_row(amount="100.00"))
@@ -112,6 +117,48 @@ class StagingRules(ScratchDB):
         ])
 
 
+class SeatingRules(FileLoading):
+    """Floor plan by date + the combined-table fix (sql/006_floor_plan.sql)."""
+
+    def seat(self, opened, table, guests):
+        order_id = 1300000000000000400 + len(self.placed)
+        self.placed.append((order_id, opened, table, guests))
+        return order_id
+
+    def setUp(self):
+        super().setUp()
+        self.placed = []
+
+    def run_cases(self, cases):
+        ids = [self.seat(*case[:3]) for case in cases]
+        rows = [order_row(order_id=str(i), opened=o, table=t, guests=str(g))
+                for i, o, t, g in self.placed]
+        self.load("seating.csv", HEADER_C, *rows)
+        for order_id, case in zip(ids, cases):
+            got = self.conn.execute(
+                "SELECT seating_fit, seating_unit, unit_seats, guests_implausible "
+                "FROM staging.order_seating WHERE order_id = %s", (order_id,)).fetchone()
+            self.assertEqual(got, case[3], case[:3])
+
+    def test_party_placement_follows_the_floor_plan_in_force_that_day(self):
+        self.run_cases([
+            # opened,           table, guests, (fit, unit, seats, implausible)
+            ("1/10/26 7:00 PM", "E3", 5, ("table", "E3", 6, False)),              # E3 is the large table now
+            ("10/1/25 7:00 PM", "E3", 5, ("combination", "E1+E2+E3", 6, False)),  # it seated 2 before 11/24/25
+            ("10/1/25 7:00 PM", "E4", 2, ("combination", "E4+E5", 2, False)),
+            ("1/10/26 7:00 PM", "E4", 2, ("unknown_table", None, None, False)),   # E4 gone after 11/23/25
+            ("3/1/26 7:00 PM", "BD2", 6, ("combination", "BD1+BD2", 6, False)),
+            ("3/1/26 7:00 PM", "BD2", 10, ("whole_room", "Black Duck (whole room)", 14, False)),
+            ("3/1/26 7:00 PM", "BD2", 16, ("over_capacity", "Black Duck (whole room)", 14, False)),
+            ("3/1/26 7:00 PM", "O6", 2, ("table", "O6", 2, False)),
+            ("3/1/26 7:00 PM", "O6", 3, ("over_capacity", None, None, False)),    # O6 never combines
+            ("3/1/26 7:00 PM", "O6", 40, ("over_capacity", None, None, True)),
+            ("3/1/26 7:00 PM", "B1", 2, ("bar", None, None, False)),
+            ("3/1/26 7:00 PM", "B1", 13, ("bar", None, None, True)),
+            ("3/1/26 7:00 PM", "", 4, ("no_table", None, None, False)),
+        ])
+
+
 @unittest.skipUnless(REAL_EXPORTS, "no exports in data/exports/")
 class StagingOnRealExports(ScratchDB):
     @classmethod
@@ -146,6 +193,12 @@ class StagingOnRealExports(ScratchDB):
             "FROM staging.item_selections WHERE NOT is_void GROUP BY 1) i USING (order_id) "
             "WHERE o.amount <> i.s")
         self.assertEqual(mismatches, 0)
+
+    def test_every_order_is_placed_once_on_a_known_table(self):
+        self.assertEqual(self.scalar("SELECT count(*) FROM staging.order_seating"),
+                         self.scalar("SELECT count(*) FROM staging.orders"))
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM staging.order_seating WHERE seating_fit = 'unknown_table'"), 0)
 
     def test_total_is_amount_plus_tax_tip_gratuity(self):
         self.assertEqual(self.scalar(
