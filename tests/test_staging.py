@@ -43,13 +43,20 @@ class StagingRules(ScratchDB):
         row = cur.fetchone()
         return dict(zip(names, row)) if row else None
 
-    def test_newest_load_wins_and_copies_are_counted(self):
+    def test_without_dated_file_names_the_newest_load_wins(self):
         self.load("old.csv", HEADER_C, order_row(amount="100.00"))
         self.load("new.csv", HEADER_C, order_row(amount="120.00"))
         o = self.order()
         self.assertEqual((o["amount"], o["source_file"], o["copies_in_raw"]),
                          (Decimal("120.00"), "new.csv", 2))
         self.assertEqual(self.conn.execute("SELECT count(*) FROM staging.orders").fetchone()[0], 1)
+
+    def test_export_with_the_later_date_range_wins_even_if_loaded_first(self):
+        self.load("OrderDetails_2026_01_01-2026_03_01.csv", HEADER_C, order_row(amount="120.00"))
+        self.load("OrderDetails_2025_10_24-2026_01_01.csv", HEADER_C, order_row(amount="100.00"))
+        self.load("renamed.csv", HEADER_C, order_row(amount="90.00"))   # no date in name: ranks last
+        o = self.order()
+        self.assertEqual((o["amount"], o["copies_in_raw"]), (Decimal("120.00"), 3))
 
     def test_timestamps_and_the_4am_service_day(self):
         cases = {  # Opened -> (opened_at, service_date)

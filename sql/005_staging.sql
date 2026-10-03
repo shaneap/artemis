@@ -3,8 +3,9 @@
 -- "rebuilds" staging; raw is never touched.
 --
 -- Which copy wins: Order Id / Item Selection Id repeat across exports (adjacent pulls share
--- their boundary date, and re-pulls repeat everything). The copy from the most recent load
--- (highest load_id) is kept. All repeats seen so far are identical.
+-- their boundary date, and re-pulls repeat everything). The copy from the export whose date
+-- range ends latest is kept (Toast names files ..._YYYY_MM_DD-YYYY_MM_DD.csv); ties, and files
+-- named some other way, fall back to the most recent load. Decided by Shane 2026-10-03.
 --
 -- Not done here yet: combined-table fix (D010, rule not defined), table code -> seating
 -- unit mapping (D007, floor plan changed over time), order type (Seated / Event / To-Go).
@@ -30,10 +31,20 @@ LANGUAGE sql IMMUTABLE STRICT AS $$
     WHERE m IS NOT NULL
 $$;
 
+-- End date of an export's range, from its Toast file name; NULL if the name doesn't match.
+CREATE OR REPLACE FUNCTION staging.export_end_date(source_file TEXT) RETURNS DATE
+LANGUAGE sql IMMUTABLE STRICT AS $$
+    SELECT make_date(m[1]::int, m[2]::int, m[3]::int)
+    FROM (SELECT regexp_match(source_file, '_\d{4}_\d{2}_\d{2}-(\d{4})_(\d{2})_(\d{2})\.csv$') AS m) x
+    WHERE m IS NOT NULL
+$$;
+
 CREATE OR REPLACE VIEW staging.orders AS
 WITH ranked AS (
     SELECT r.*,
-           row_number() OVER (PARTITION BY "Order Id" ORDER BY load_id DESC) AS copy_rank,
+           row_number() OVER (PARTITION BY "Order Id"
+                              ORDER BY staging.export_end_date(source_file) DESC NULLS LAST,
+                                       load_id DESC) AS copy_rank,
            count(*)     OVER (PARTITION BY "Order Id")                       AS copies_in_raw
     FROM raw.order_details_c r
 ), typed AS (
@@ -86,7 +97,9 @@ WITH unioned AS (
     FROM raw.item_selection_details_b
 ), ranked AS (
     SELECT u.*,
-           row_number() OVER (PARTITION BY "Item Selection Id" ORDER BY load_id DESC) AS copy_rank,
+           row_number() OVER (PARTITION BY "Item Selection Id"
+                              ORDER BY staging.export_end_date(source_file) DESC NULLS LAST,
+                                       load_id DESC) AS copy_rank,
            count(*)     OVER (PARTITION BY "Item Selection Id")                       AS copies_in_raw
     FROM unioned u
 )

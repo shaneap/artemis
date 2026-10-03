@@ -2,6 +2,15 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-03
+
+### Changed
+- **Staging keeps the copy from the export whose date range ends latest** (parsed from the Toast file name), not the most recently loaded file, so loading an older export later can't overwrite newer data. Files without a dated name rank last; ties fall back to load order. Decided by Shane.
+
+### Findings
+- **The floor plan doesn't match the "single seater" description of E4, E5 and BD4.** E5 seated 4 guests on 113 of 205 orders and E4 on 37 of 88; each was busy at the same time as E1/E2/E3 on 50-68% of its orders but at the same time as the other only 7-16%. BD4 averaged 6.1 guests (30 orders of 8) and was busy alongside BD2 on 84% of its orders. Evangeline also changed shape around Nov 24, 2025: E3 went from 2.1 to 5.3 average guests.
+- **Parties larger than any listed combination:** Black Duck has 15-20 guest orders (~$600-1,900) rung on BD1/BD2/BD3/BD4/BD5, which look like whole-room events; E1 and E3 have 10-12 guest orders. A handful of guest counts are implausible (101 at B12, 91 at B1 and O10, 70 at B11, 50 at B1 for $0).
+
 ## 2026-10-01
 
 ### Added
