@@ -7,7 +7,7 @@
 -- Sources:
 --   * Old layout: Toast floor-plan screenshots from 11/23/25 (Shane, 2026-10-03).
 --   * Current layout: artemis.py CAPACITY_RANGES / SEATING_UNITS (operator floor notes, Tock).
---   * Change dates are inferred, not known: Evangeline from E4/E5's last use (11/23/25),
+--   * Change dates are inferred, not known (Shane confirms the changes happened, not when): Evangeline from E4/E5's last use (11/23/25),
 --     Black Duck from BD4's last use (2/13/26). Correct them here if Shane finds the real dates.
 
 CREATE TABLE IF NOT EXISTS staging.floor_plan_tables (
@@ -49,8 +49,10 @@ INSERT INTO staging.floor_plan_tables (table_code, section, seats_min, seats_max
     ('E1', 'Evangeline', 2, 2, '2025-04-25', '2025-11-24'),
     ('E2', 'Evangeline', 2, 2, '2025-04-25', '2025-11-24'),
     ('E3', 'Evangeline', 2, 2, '2025-04-25', '2025-11-24'),
-    ('E4', 'Evangeline', 1, 1, '2025-04-25', '2025-11-24'),
-    ('E5', 'Evangeline', 1, 1, '2025-04-25', '2025-11-24'),
+    -- E4/E5 show as 1-seaters in Toast, but their parties averaged 4 with the other one free;
+    -- Shane (2026-10-03): "perhaps E4 and E5 were two seaters"
+    ('E4', 'Evangeline', 1, 2, '2025-04-25', '2025-11-24'),
+    ('E5', 'Evangeline', 1, 2, '2025-04-25', '2025-11-24'),
     -- Evangeline, current: E4/E5 gone, E3 is the large table
     ('E1', 'Evangeline', 2, 2, '2025-11-24', NULL),
     ('E2', 'Evangeline', 2, 2, '2025-11-24', NULL),
@@ -80,9 +82,11 @@ INSERT INTO staging.floor_plan_tables (table_code, section, seats_min, seats_max
 -- known (opening layout) the combination seats the sum of its tables' maximums.
 INSERT INTO staging.floor_plan_combinations (combination, section, table_codes, seats, is_whole_room, valid_from, valid_to) VALUES
     -- Black Duck, opening layout
-    ('BD1+BD2', 'Black Duck', '{BD1,BD2}', 5, false, '2025-04-25', '2026-02-14'),
+    -- BD1+BD2 seated 6 (a party of 6 sat there on 11/22/25); BD3+BD4+BD5 confirmed by Shane
+    ('BD1+BD2', 'Black Duck', '{BD1,BD2}', 6, false, '2025-04-25', '2026-02-14'),
     ('BD3+BD5', 'Black Duck', '{BD3,BD5}', 6, false, '2025-04-25', '2026-02-14'),
-    ('Black Duck (whole room)', 'Black Duck', '{BD1,BD2,BD3,BD4,BD5}', 12, true, '2025-04-25', '2026-02-14'),
+    ('BD3+BD4+BD5', 'Black Duck', '{BD3,BD4,BD5}', 7, false, '2025-04-25', '2026-02-14'),
+    ('Black Duck (whole room)', 'Black Duck', '{BD1,BD2,BD3,BD4,BD5}', 13, true, '2025-04-25', '2026-02-14'),
     -- Black Duck, current
     ('BD1+BD2', 'Black Duck', '{BD1,BD2}', 6, false, '2026-02-14', NULL),
     ('BD3+BD5', 'Black Duck', '{BD3,BD5}', 8, false, '2026-02-14', NULL),
@@ -90,8 +94,8 @@ INSERT INTO staging.floor_plan_combinations (combination, section, table_codes, 
     -- Evangeline, opening layout ("E4 and E5 were often combined to seat a party of 2")
     ('E1+E2',    'Evangeline', '{E1,E2}',    4, false, '2025-04-25', '2025-11-24'),
     ('E1+E2+E3', 'Evangeline', '{E1,E2,E3}', 6, false, '2025-04-25', '2025-11-24'),
-    ('E4+E5',    'Evangeline', '{E4,E5}',    2, false, '2025-04-25', '2025-11-24'),
-    ('Evangeline (whole room)', 'Evangeline', '{E1,E2,E3,E4,E5}', 8, true, '2025-04-25', '2025-11-24'),
+    ('E4+E5',    'Evangeline', '{E4,E5}',    4, false, '2025-04-25', '2025-11-24'),
+    ('Evangeline (whole room)', 'Evangeline', '{E1,E2,E3,E4,E5}', 10, true, '2025-04-25', '2025-11-24'),
     -- Evangeline, current
     ('E1+E2',    'Evangeline', '{E1,E2}',    4, false, '2025-11-24', NULL),
     ('E1+E2+E3', 'Evangeline', '{E1,E2,E3}', 10, false, '2025-11-24', NULL),

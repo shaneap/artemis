@@ -145,7 +145,11 @@ class SeatingRules(FileLoading):
             # opened,           table, guests, (fit, unit, seats, implausible)
             ("1/10/26 7:00 PM", "E3", 5, ("table", "E3", 6, False)),              # E3 is the large table now
             ("10/1/25 7:00 PM", "E3", 5, ("combination", "E1+E2+E3", 6, False)),  # it seated 2 before 11/24/25
-            ("10/1/25 7:00 PM", "E4", 2, ("combination", "E4+E5", 2, False)),
+            ("10/1/25 7:00 PM", "E4", 2, ("table", "E4", 2, False)),
+            ("10/1/25 7:00 PM", "E4", 4, ("combination", "E4+E5", 4, False)),
+            ("10/1/25 7:00 PM", "BD2", 6, ("combination", "BD1+BD2", 6, False)),
+            ("10/1/25 7:00 PM", "BD4", 7, ("combination", "BD3+BD4+BD5", 7, False)),
+            ("10/1/25 7:00 PM", "BD4", 8, ("whole_room", "Black Duck (whole room)", 13, False)),
             ("1/10/26 7:00 PM", "E4", 2, ("unknown_table", None, None, False)),   # E4 gone after 11/23/25
             ("3/1/26 7:00 PM", "BD2", 6, ("combination", "BD1+BD2", 6, False)),
             ("3/1/26 7:00 PM", "BD2", 10, ("whole_room", "Black Duck (whole room)", 14, False)),
