@@ -2,7 +2,7 @@
 
 Run directly after dropping a new pull into `data/exports/`:
 
-    python merge_exports.py [--dry-run] [--exports-dir DIR] [--out PATH]
+    python3 legacy/merge_exports.py [--dry-run] [--exports-dir DIR] [--out PATH]
 
 `artemis.load_orders()` also calls `build()` on its own when the merged file is out of date,
 so in normal use the notebook just picks up a new export without anyone running this by hand.
@@ -43,7 +43,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent  # this file lives in legacy/
 EXPORTS_DIR = PROJECT_ROOT / 'data' / 'exports'
 MERGED_PATH = PROJECT_ROOT / 'data' / 'orders_merged.csv'
 META_PATH = PROJECT_ROOT / 'data' / 'orders_merged.meta.json'

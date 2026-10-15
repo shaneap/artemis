@@ -2,42 +2,42 @@
 
 Analysis of one bar/restaurant's Toast POS order exports (Ronkonkoma, NY) to answer the owner's
 seating, turn-time, pricing and opening-hours questions. Python + pandas; no web app, no DB.
-Owner-facing deliverable is `owner_report.html`.
+Owner-facing deliverable is `reports/owner_report.html`. The old pandas pipeline lives in `legacy/`.
 
 ## Read this first, not everything
 
-- **Don't read `analysis.ipynb` whole** — ~740 KB of embedded outputs. Find the cell you need
+- **Don't read `legacy/analysis.ipynb` whole** — ~740 KB of embedded outputs. Find the cell you need
   with a `python3 -c` JSON scan of `cells[i]['source']` (59 cells; section headings at cells
   6, 26, 40, 47). Edit it with NotebookEdit.
 - **Don't read `README.md` / `CHANGELOG.md` whole** (~19 KB / ~18 KB). Findings, methodology
   and history are summarized below; grep them for a specific number or date.
 - **Don't cat CSVs** in `data/` or `weather_cache.csv`. Use pandas with `nrows`/`head`.
   Export format details are in `docs/column_inventory.md`.
-- `owner_report.html` is hand-written prose (~30 KB); only open it when editing the report.
+- `reports/owner_report.html` is hand-written prose (~30 KB); only open it when editing the report.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `artemis.py` | Shared pipeline. Constants (`SEATING_UNITS`, `CAPACITY_RANGES`, `RESERVATION_SECTIONS`, `SERVICE_DAY_CUTOFF_HOUR=4`, `EVENT_AMOUNT_THRESHOLD=400`, `DURATION_FLOOR_MINUTES=15`), `load_orders()`, `classify_order_type`, `apply_duration_floor`, time layer: `add_service_day`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`. Single source of truth — notebook and scripts import it. |
-| `merge_exports.py` | Upserts every `data/exports/OrderDetails_*.csv` into `data/orders_merged.csv` (+ `.meta.json` manifest). Identity = `Opened`+`Table`+`# of Guests`+occurrence index; newest pull wins field by field. `load_orders()` rebuilds it automatically when stale. |
+| `legacy/artemis.py` | Shared pipeline. Constants (`SEATING_UNITS`, `CAPACITY_RANGES`, `RESERVATION_SECTIONS`, `SERVICE_DAY_CUTOFF_HOUR=4`, `EVENT_AMOUNT_THRESHOLD=400`, `DURATION_FLOOR_MINUTES=15`), `load_orders()`, `classify_order_type`, `apply_duration_floor`, time layer: `add_service_day`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`. Single source of truth — notebook and scripts import it. |
+| `legacy/merge_exports.py` | Upserts every `data/exports/OrderDetails_*.csv` into `data/orders_merged.csv` (+ `.meta.json` manifest). Identity = `Opened`+`Table`+`# of Guests`+occurrence index; newest pull wins field by field. `load_orders()` rebuilds it automatically when stale. |
 | `load_raw.py`, `sql/`, `docker-compose.yml`, `tests/` | The new PostgreSQL warehouse — see **Warehouse** below. |
-| `verify_artemis.py` | The test suite: 18 invariant checks, PASS/FAIL, nonzero exit on failure. ~1 s. |
-| `report_figures.py` | Recomputes every number quoted in `owner_report.html`, in document order. |
-| `weather.py` | Open-Meteo daily archive for Ronkonkoma, cached to `weather_cache.csv`; holiday calendar. |
-| `analysis.ipynb` | Narrative analysis: VPCPM/TPCPM by party size & section → turn times & utilization → owner's 7 questions → revenue by time of day / weather. |
+| `legacy/verify_artemis.py` | The legacy test suite: 18 invariant checks, PASS/FAIL, nonzero exit on failure. ~1 s. |
+| `legacy/report_figures.py` | Recomputes every number quoted in `reports/owner_report.html`, in document order. |
+| `weather.py` | Open-Meteo daily archive for Ronkonkoma, cached to `weather_cache.csv`; holiday calendar. Stays at the root: used by `analysis/db.py` and by `legacy/` (which adds the root to `sys.path`). |
+| `legacy/analysis.ipynb` | Narrative analysis: VPCPM/TPCPM by party size & section → turn times & utilization → owner's 7 questions → revenue by time of day / weather. |
 | `docs/column_inventory.md` | 2026-09-27 audit of the raw exports (two column layouts, duplicate rows, no order ID, key collisions). Feeds decisions D002/D008 in `DECISIONS.md`. |
-| `Artemis.Rproj`, `.Rhistory` | Leftover RStudio files; unused. |
+| `RESUME_LOG.md` | Gitignored, private: Shane's resume material. |
 
 ## Commands
 
 `python` is not on PATH — always use `python3`. `jupyter` is not on PATH either; use `python3 -m jupyter`.
 
 ```bash
-python3 verify_artemis.py            # run after any pipeline change
-python3 merge_exports.py --dry-run   # merge report without writing
-python3 report_figures.py            # figures for the owner report
-python3 -m jupyter nbconvert --to notebook --execute --inplace analysis.ipynb   # re-run notebook
+python3 legacy/verify_artemis.py     # run after any pipeline change
+python3 legacy/merge_exports.py --dry-run   # merge report without writing
+python3 legacy/report_figures.py     # figures for the owner report
+python3 -m jupyter nbconvert --to notebook --execute --inplace legacy/analysis.ipynb   # re-run notebook
 ```
 
 ## Warehouse (the current direction; the old pandas pipeline is set aside)
@@ -109,10 +109,12 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace analysis.ipynb   
 
 ## Conventions
 
-- Keep logic in `artemis.py`/`merge_exports.py`, not the notebook. New invariants go in
-  `verify_artemis.py` (no pytest).
-- If a change moves any reported number, run `report_figures.py` and reconcile
-  `owner_report.html` and the README tables.
+- Legacy pipeline: keep logic in `legacy/artemis.py`/`legacy/merge_exports.py`, not the notebook.
+  New invariants go in `legacy/verify_artemis.py` (no pytest).
+- If a change moves any reported number, run `legacy/report_figures.py` and reconcile
+  `reports/owner_report.html` and the README tables.
+- After notable progress, also add a dated entry to `RESUME_LOG.md` (gitignored, private; Shane's
+  resume material — instructions at its top).
 - Log notable changes in `CHANGELOG.md` (dated sections: Added / Changed / Fixed / Findings /
   Methodology / Retracted). Retract wrong claims explicitly rather than silently editing.
 - Prose style: plain language, state what the data can't tell you, figures with context.

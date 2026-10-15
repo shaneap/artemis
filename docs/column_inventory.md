@@ -154,7 +154,7 @@ Compared over each pair's overlapping date range, after removing exact duplicate
 
 D008 describes `merge_exports.py` as matching on Opened + Table + # of Guests. The code
 actually adds a fourth part: an occurrence number within each colliding group, assigned by
-sorting on Amount then Discount Amount (`_add_occurrence`, `merge_exports.py:224`). So it
+sorting on Amount then Discount Amount (`_add_occurrence`, `legacy/merge_exports.py:224`). So it
 already avoids collapsing the 45 same-key rows in the 01_15 file, but the match then depends
 on Amount, which is a field Toast can revise.
 

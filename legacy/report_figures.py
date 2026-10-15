@@ -8,18 +8,21 @@ So this script does the other half: it recomputes every number the report cites,
 grouped in the order they appear. Drop a newer export into `data/exports/`, run this, and
 update the figures against the output.
 
-    python report_figures.py [path-to-export.csv]
+    python3 legacy/report_figures.py [path-to-export.csv]
 
 With no argument it reads the merged dataset -- every export pulled so far, not just the latest
 one. A path still narrows it to a single raw export.
 """
 
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 import artemis
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # weather.py lives at the repo root
 
 CSV = sys.argv[1] if len(sys.argv) > 1 else None  # None -> the merged dataset
 EVENT_PRICES = {'Black Duck': 1200, 'Evangeline': 900}

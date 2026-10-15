@@ -1,8 +1,35 @@
 # Artemis
 
-Exploratory analysis of restaurant order data — looking at how table value scales with party size, and at how tables are used across a night, to inform seating and table-management decisions.
+Analysis of a bar/restaurant's Toast POS order exports, answering the owner's questions on seating, table turns, event pricing, opening hours and revenue trend.
 
-The shared pipeline lives in [artemis.py](artemis.py); the analysis notebook ([analysis.ipynb](analysis.ipynb)) imports it. There are two layers:
+## Repository layout
+
+| Path | What it is |
+| --- | --- |
+| [`sql/`](sql/), [`load_raw.py`](load_raw.py), [`docker-compose.yml`](docker-compose.yml) | **PostgreSQL warehouse (current).** Raw exports → typed, de-duplicated staging → analytics facts and dimensions. |
+| [`analysis/`](analysis/) | Analysis scripts on top of the warehouse; results in [`analysis/results/`](analysis/results/). See [analysis/README.md](analysis/README.md). |
+| [`tests/`](tests/) | Warehouse tests (unittest, scratch databases). |
+| [`weather.py`](weather.py) | Daily weather for Ronkonkoma (Open-Meteo), cached; used by both pipelines. |
+| [`reports/owner_report.html`](reports/owner_report.html) | The owner-facing write-up. |
+| [`legacy/`](legacy/) | The original pandas pipeline and notebook (Jul–Aug 2026), which the report figures come from. |
+| [`docs/`](docs/), [DECISIONS.md](DECISIONS.md), [CHANGELOG.md](CHANGELOG.md) | Export audit, decision log, history. |
+
+### Quick start (warehouse)
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env                 # set a real password
+docker compose up -d                 # PostgreSQL 16; schema built from sql/
+python3 load_raw.py                  # load data/exports/*.csv, refresh staging + analytics
+python3 -m unittest tests.test_raw_load tests.test_staging tests.test_analytics
+python3 analysis/trend.py            # likewise hours.py, menu.py
+```
+
+Toast exports are not tracked; put them in `data/exports/`.
+
+## Legacy pandas pipeline
+
+The rest of this README describes the original pipeline in [`legacy/`](legacy/). Its shared module is [legacy/artemis.py](legacy/artemis.py); the analysis notebook ([legacy/analysis.ipynb](legacy/analysis.ipynb)) imports it. There are two layers:
 
 - **Per-order layer** — loads per-order exports (guest count, amount, open/close times), derives table duration and two revenue-rate metrics (VPCPM/TPCPM), and visualizes how they trend across party sizes and seating sections.
 - **Time layer** — reconstructs what the floor actually looked like: which tables were occupied in each 15-minute slot, and how long each table sat empty between parties. The per-order layer examines one order at a time and so cannot see a table sitting idle between two healthy-looking checks.
@@ -11,7 +38,7 @@ The shared pipeline lives in [artemis.py](artemis.py); the analysis notebook ([a
 
 **Active / exploratory.** The core pipeline (load → clean → section/capacity mapping → VPCPM/TPCPM → shrinkage-weighted section summaries) runs end to end with no known correctness bugs. See [CHANGELOG.md](CHANGELOG.md) for what's been fixed and when.
 
-Run `python verify_artemis.py` to check the pipeline's invariants (row counts, service-day boundary, occupancy bounds, turn-gap reconciliation, seat totals, banquette pairings).
+Run `python3 legacy/verify_artemis.py` to check the pipeline's invariants (row counts, service-day boundary, occupancy bounds, turn-gap reconciliation, seat totals, banquette pairings).
 
 **Known open issues (not yet resolved):**
 - **Multi-table/combined bookings are unrecoverable from Toast exports** — see [Combined bookings & the capacity mismatch](#combined-bookings--the-capacity-mismatch) below. Current mitigation is a flag (`Likely_Combined_Booking`) that splits these rows into a descriptive-only summary; this is a backburner item pending a POS-side or process-level fix, not something fixable in the notebook alone.
@@ -45,13 +72,13 @@ Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while ave
 
 ## The owner-facing report
 
-[owner_report.html](owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
+[reports/owner_report.html](reports/owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
 
-It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python report_figures.py` recomputes every number the report quotes**, labelled and in the order they appear — drop a newer export into `data/exports/`, run it, and update the figures against the output. Passing a path (`python report_figures.py export.csv`) narrows it to a single raw export instead of the merged dataset.
+It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python3 legacy/report_figures.py` recomputes every number the report quotes**, labelled and in the order they appear — drop a newer export into `data/exports/`, run it, and update the figures against the output. Passing a path (`python3 legacy/report_figures.py export.csv`) narrows it to a single raw export instead of the merged dataset.
 
 ## The owner's questions
 
-`analysis.ipynb` closes with a section answering the operator's seven written questions directly. In brief:
+`legacy/analysis.ipynb` closes with a section answering the operator's seven written questions directly. In brief:
 
 | Question | Answer |
 | --- | --- |
@@ -128,16 +155,16 @@ pip install -r requirements.txt
 Then launch the notebook:
 
 ```bash
-jupyter notebook analysis.ipynb
+python3 -m jupyter notebook legacy/analysis.ipynb
 ```
 
 ## Data
 
-Order export CSVs are not tracked in this repo. **Drop each Toast pull into `data/exports/` and leave the previous ones there** — [merge_exports.py](merge_exports.py) upserts them into one continuous dataset at `data/orders_merged.csv`, which is what `artemis.load_orders()` reads when called with no argument. Pull a fresh export, re-run the notebook, and the analysis extends; nothing needs editing. Required columns are `Opened`, `Closed`, `Table`, `# of Guests`, `Discount Amount`, `Amount`, `Tip` and `Gratuity`.
+Order export CSVs are not tracked in this repo. **Drop each Toast pull into `data/exports/` and leave the previous ones there** — [legacy/merge_exports.py](legacy/merge_exports.py) upserts them into one continuous dataset at `data/orders_merged.csv`, which is what `artemis.load_orders()` reads when called with no argument. Pull a fresh export, re-run the notebook, and the analysis extends; nothing needs editing. Required columns are `Opened`, `Closed`, `Table`, `# of Guests`, `Discount Amount`, `Amount`, `Tip` and `Gratuity`.
 
 ```bash
-python merge_exports.py --dry-run   # what a merge would do, without writing
-python merge_exports.py             # rebuild data/orders_merged.csv
+python3 legacy/merge_exports.py --dry-run  # what a merge would do, without writing
+python3 legacy/merge_exports.py      # rebuild data/orders_merged.csv
 ```
 
 Running it by hand is optional — `load_orders()` rebuilds the merged file itself whenever the set of exports on disk has changed. Three properties of real Toast exports shape how the merge works:
@@ -146,11 +173,11 @@ Running it by hand is optional — `load_orders()` rebuilds the merged file itse
 - **Toast amends orders after service.** One 5 June check reads Tip \$23.70 / closed 9:02pm in the May pull, and Tip \$47.38 / closed the following evening in the July one. Deduplicating on row content would keep both and count the order twice, so rows are matched on identity — `Opened`, `Table`, `# of Guests`, none of which Toast revises — and **the newest pull wins, field by field**. A field the newest pull doesn't carry keeps the value an earlier one supplied, which is what protects `Duration` if the report is ever reconfigured without it.
 - **Distinct orders can share an identity.** About 0.7% of rows are split checks rung in the same minute at the same table, up to three deep. Each gets an occurrence index so they survive the merge separately and still match their own earlier versions across pulls.
 
-Pull order is taken from the date range in the filename (`OrderDetails_2026_01_15-2026_07_15.csv`), falling back to file modification time. `verify_artemis.py` enforces that the merge is lossless: no order appears twice, no export's orders go missing, and revenue on single-source dates is conserved.
+Pull order is taken from the date range in the filename (`OrderDetails_2026_01_15-2026_07_15.csv`), falling back to file modification time. `legacy/verify_artemis.py` enforces that the merge is lossless: no order appears twice, no export's orders go missing, and revenue on single-source dates is conserved.
 
 ## Seating units
 
-**The POS table code is not the physical unit.** Black Duck and Evangeline are banquettes subdivided into two codes each, and most Open Lounge tables pair up. Toast records a whole-banquette booking against one of its codes, so comparing guest count to that code's own capacity makes an ordinary booking look like an overflow. `SEATING_UNITS` in [artemis.py](artemis.py) models the real furniture:
+**The POS table code is not the physical unit.** Black Duck and Evangeline are banquettes subdivided into two codes each, and most Open Lounge tables pair up. Toast records a whole-banquette booking against one of its codes, so comparing guest count to that code's own capacity makes an ordinary booking look like an overflow. `SEATING_UNITS` in [legacy/artemis.py](legacy/artemis.py) models the real furniture:
 
 | Unit | POS codes | Seats |
 | --- | --- | --- |
@@ -167,7 +194,7 @@ Pull order is taken from the date range in the filename (`OrderDetails_2026_01_1
 
 Section totals: **Open Lounge 22, Black Duck 14, Evangeline 10, Bar 12** — matching the operator's own figures exactly.
 
-The pairings are confirmed against Tock and independently against the order data: when a code hosts a party too large for its own half, its partner is empty 92-100% of the time, versus 20-66% for small parties. Non-adjacent control pairs show no such effect. `verify_artemis.py` enforces this as an invariant.
+The pairings are confirmed against Tock and independently against the order data: when a code hosts a party too large for its own half, its partner is empty 92-100% of the time, versus 20-66% for small parties. Non-adjacent control pairs show no such effect. `legacy/verify_artemis.py` enforces this as an invariant.
 
 `Capacity_Min`/`Capacity_Max` remain per-code as the *solo* range — what a code seats when its partner is in separate use. Notes:
 

@@ -1,4 +1,4 @@
-"""Verification checks for the artemis pipeline. Run directly: `python verify_artemis.py`
+"""Verification checks for the artemis pipeline. Run directly: `python3 legacy/verify_artemis.py`
 
 These are the checks that were run by hand when the time layer was built. Keeping them as a
 script means a future change to a cleaning rule or the service-day cutoff can't silently break
