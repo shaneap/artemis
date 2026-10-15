@@ -1,7 +1,7 @@
 # Legacy pandas pipeline
 
 The original analysis (Jul–Aug 2026), before the PostgreSQL warehouse. The figures in
-[`../reports/owner_report.html`](../reports/owner_report.html) come from here. Set aside rather than
+the owner report (`../reports/owner_report.html`, private, not in the repo) come from here. Set aside rather than
 deleted; new work goes in the warehouse (`../sql/`, `../analysis/`).
 
 | File | Role |

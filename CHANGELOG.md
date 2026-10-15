@@ -5,7 +5,7 @@ All notable changes to the Artemis analysis are documented here. Format loosely 
 ## 2026-10-15
 
 ### Changed
-- **Repository reorganized for GitHub.** The original pandas pipeline (`artemis.py`, `merge_exports.py`, `verify_artemis.py`, `report_figures.py`, `analysis.ipynb`) moved to `legacy/`, and `owner_report.html` to `reports/`. `weather.py` stays at the root (used by both pipelines). `merge_exports.py` now resolves `data/` from the repository root, and the report script and notebook add the root to `sys.path` for `weather`. README opens with the repository layout and a warehouse quick start; `legacy/README.md` added. Unused RStudio files removed. `statsmodels` added to `requirements.txt`.
+- **Repository reorganized for GitHub.** The original pandas pipeline (`artemis.py`, `merge_exports.py`, `verify_artemis.py`, `report_figures.py`, `analysis.ipynb`) moved to `legacy/`, and `owner_report.html` to `reports/`. `weather.py` stays at the root (used by both pipelines). `merge_exports.py` now resolves `data/` from the repository root, and the report script and notebook add the root to `sys.path` for `weather`. README opens with the repository layout and a warehouse quick start; `legacy/README.md` added. Unused RStudio files removed. `statsmodels` added to `requirements.txt`. `reports/` is gitignored: the owner report stays private.
 
 ### Verified
 - After the move: warehouse tests 37/37 OK; `analysis/` scripts reproduce their results files unchanged; the notebook executes; `report_figures.py` runs. `verify_artemis.py` passes 17 of 18. The failing check (one order opened in the 3-5 am window) fails identically on the pre-move code, so it comes from the newer exports, not the reorganization.

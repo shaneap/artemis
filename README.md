@@ -10,7 +10,7 @@ Analysis of a bar/restaurant's Toast POS order exports, answering the owner's qu
 | [`analysis/`](analysis/) | Analysis scripts on top of the warehouse; results in [`analysis/results/`](analysis/results/). See [analysis/README.md](analysis/README.md). |
 | [`tests/`](tests/) | Warehouse tests (unittest, scratch databases). |
 | [`weather.py`](weather.py) | Daily weather for Ronkonkoma (Open-Meteo), cached; used by both pipelines. |
-| [`reports/owner_report.html`](reports/owner_report.html) | The owner-facing write-up. |
+| `reports/` | The owner-facing write-up (kept private; not in the repo). |
 | [`legacy/`](legacy/) | The original pandas pipeline and notebook (Jul–Aug 2026), which the report figures come from. |
 | [`docs/`](docs/), [DECISIONS.md](DECISIONS.md), [CHANGELOG.md](CHANGELOG.md) | Export audit, decision log, history. |
 
@@ -72,7 +72,7 @@ Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while ave
 
 ## The owner-facing report
 
-[reports/owner_report.html](reports/owner_report.html) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
+The owner report (`reports/owner_report.html`, kept private and not in this repo) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
 
 It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python3 legacy/report_figures.py` recomputes every number the report quotes**, labelled and in the order they appear — drop a newer export into `data/exports/`, run it, and update the figures against the output. Passing a path (`python3 legacy/report_figures.py export.csv`) narrows it to a single raw export instead of the merged dataset.
 

@@ -18,6 +18,7 @@ weather_cache.csv
 # Local secrets (see .env.example)
 .env
 
-# Private notes (not for the repo)
+# Private notes and client deliverables (not for the repo)
 OPEN_QUESTIONS.md
+reports/
 RESUME_LOG.md

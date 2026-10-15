@@ -2,7 +2,7 @@
 
 Analysis of one bar/restaurant's Toast POS order exports (Ronkonkoma, NY) to answer the owner's
 seating, turn-time, pricing and opening-hours questions. Python + pandas; no web app, no DB.
-Owner-facing deliverable is `reports/owner_report.html`. The old pandas pipeline lives in `legacy/`.
+Owner-facing deliverable is `reports/owner_report.html` (gitignored: client-private, never commit). The old pandas pipeline lives in `legacy/`.
 
 ## Read this first, not everything
 
