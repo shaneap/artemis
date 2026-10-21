@@ -94,9 +94,15 @@ check('revenue on single-source dates is conserved through the merge',
 df = artemis.load_orders(verbose=False)
 
 # The service-day cutoff has to fall in genuinely dead time, or it splits a real night in half.
+# Seated trade only: untabled event/to-go checks are rung outside service hours (one $400
+# event check opened at 3:00am on 12/20/25 and was paid that afternoon), so they say nothing
+# about where the night ends.
 spanning = artemis.verify_service_day_cutoff(df)
-check('no orders open within an hour of the 4am service-day cutoff',
-      len(spanning) == 0, f'{len(spanning)} orders in the 3am-5am window')
+seated_spanning = spanning[spanning['Order_Type'] == 'Seated']
+check('no seated orders open within an hour of the 4am service-day cutoff',
+      len(seated_spanning) == 0,
+      f'{len(seated_spanning)} seated orders in the 3am-5am window '
+      f'({len(spanning) - len(seated_spanning)} untabled check(s) ignored)')
 
 # Monday should be effectively empty once Sunday-night spillover is reattributed. What survives
 # is catering/pickup rung in on a closed day, not seated business.

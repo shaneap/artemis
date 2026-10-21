@@ -2,6 +2,14 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-20
+
+### Fixed
+- `legacy/verify_artemis.py`: the service-day cutoff check now looks at seated orders only. It had been failing on a single untabled $400 Event-Catering check opened at 3:00 am on Dec 20, 2025 and paid at 2:23 pm, a back-office entry rather than trade running past the cutoff. No seated order opens between 3 am and 7 am, so the 4 am cutoff stands. Untabled checks in the window are still counted in the check's output. 18/18 pass.
+
+### Changed
+- CLAUDE.md settled findings updated: decline vs seasonality is answered (see 2026-10-05), superseding "cannot be separated".
+
 ## 2026-10-15
 
 ### Changed

@@ -1,7 +1,7 @@
 # Artemis — context for Claude
 
 Analysis of one bar/restaurant's Toast POS order exports (Ronkonkoma, NY) to answer the owner's
-seating, turn-time, pricing and opening-hours questions. Python + pandas; no web app, no DB.
+seating, turn-time, pricing and opening-hours questions. Python + pandas, with a PostgreSQL warehouse (see **Warehouse**); no web app.
 Owner-facing deliverable is `reports/owner_report.html` (gitignored: client-private, never commit). The old pandas pipeline lives in `legacy/`.
 
 ## Read this first, not everything
@@ -103,9 +103,11 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace legacy/analysis.i
 - 81% of 5+ parties fit one physical unit — no floor-plan problem.
 - Event rates $1,200 (BD) / $900 (E) are well priced. E3 should seat 4s; BD1+BD2 seat 5s.
 - Hours: open 5 pm Tue–Thu, close midnight Tue/Wed/Sun, leave Fri/Sat (framed as break-even).
-- Rain no effect. Decline vs seasonality **cannot be separated** in Jan–Jul (time/temp r=0.90);
-  needs last year's Toast export.
-- Open items: 95% CIs paused; LOOCV k-grid is coarse; combined bookings need a POS/process fix.
+- Rain no effect. Decline vs seasonality (warehouse, Apr 2025–Sep 2026): **both**. Winter is the
+  strong season, but same months May–Sep 2026 vs 2025 are −10% regular revenue/night, −16%
+  parties; after day of week + season, parties −14%/yr (95% CI −19% to −8%). Spend per guest +8%
+  via menu mix (like-for-like prices +2%). The old "cannot be separated" (Jan–Jul only) is superseded.
+- Open items: 95% CIs on the per-section VPCPM/TPCPM summaries paused (trend CIs exist); LOOCV k-grid is coarse; combined bookings need a POS/process fix.
 
 ## Conventions
 
