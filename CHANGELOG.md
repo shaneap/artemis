@@ -4,6 +4,13 @@ All notable changes to the Artemis analysis are documented here. Format loosely 
 
 ## 2026-10-20
 
+### Retracted
+- **"Faster turning is worth ~$9K/yr"** (2026-08-06, README, owner report). `report_figures.py` sums the value over the whole data period and labels it `/yr`; in August that period was six months, so $9K was a half-year figure. Per year it is **~$18K** ($25,642 over the 523 days now in the data; ~1% of yearly sales). The naive figure is ~$312K/yr, not $156K. The conclusion stands. `report_figures.py` now divides by the length of the data period and prints both.
+- **"Decline vs seasonality cannot be separated"** (owner report, 2026-08-06): superseded by the full-history trend (2026-10-05). The revised owner report says so explicitly.
+
+### Changed
+- **Owner report revised** (private, `reports/owner_report.html`; August version kept as `reports/owner_report_2026-08.html`). It now covers Apr 25, 2025 - Sep 29, 2026, opens with a "What's changed since August" section, and every figure is recalculated: `legacy/report_figures.py` for seating, hours, events and weather; `analysis/results/` for the trend and menu. New sections on the decline-vs-season answer and the menu. E3 clash rate counted from the Nov 24, 2025 layout change only (E3 was a 2-seater before): once every 4.0 nights (64 in 257), every party seated elsewhere, mostly BD1/O8.
+
 ### Fixed
 - `legacy/verify_artemis.py`: the service-day cutoff check now looks at seated orders only. It had been failing on a single untabled $400 Event-Catering check opened at 3:00 am on Dec 20, 2025 and paid at 2:23 pm, a back-office entry rather than trade running past the cutoff. No seated order opens between 3 am and 7 am, so the 4 am cutoff stands. Untabled checks in the window are still counted in the check's output. 18/18 pass.
 

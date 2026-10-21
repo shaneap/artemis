@@ -74,9 +74,12 @@ peak = gaps[gaps['Paid_DT'].dt.hour.between(17, 22)]
 naive = (peak['Turn_Gap'] - 15).clip(lower=0).sum() / 15 * blended * 2
 real = ((peak.loc[peak['Room %'] > 75, 'Turn_Gap'] - achievable).clip(lower=0).sum()
         / 15 * blended * 2)
+# Both sums cover the whole data period; scale to a year for the report.
+years = ((raw['Service_Date'].max() - raw['Service_Date'].min()).days + 1) / 365.25
 print(f'\nreset achieved when busy   {achievable:.0f} min')
-print(f'value, demand-constrained  ${real:,.0f}/yr   <- the honest figure')
-print(f'value, naive assumption    ${naive:,.0f}/yr')
+print(f'value, demand-constrained  ${real / years:,.0f}/yr   <- the honest figure '
+      f'(${real:,.0f} over {years:.2f} years)')
+print(f'value, naive assumption    ${naive / years:,.0f}/yr')
 
 # Q2 -- utilization by night.
 night = res.groupby(['Service_Date', 'Service_DOW']).agg(

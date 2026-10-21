@@ -26,6 +26,11 @@ Every time we agree on something, it gets an entry here. Keep this file in the r
 | D009 | Sessions over 6 hours are flagged and left out of time metrics | Decided | 2026-09-28 |
 | D010 | Data quality fixes happen in staging | Decided | 2026-09-28 |
 | D011 | Raw layer skips files it has already loaded, using a file fingerprint | Decided | 2026-09-28 |
+| D012 | Orders are identified by Toast's Order Id; items by Item Selection Id | Proposed | 2026-10-20 |
+| D013 | When an order is in two exports, the export whose date range ends latest wins | Proposed | 2026-10-03 |
+| D014 | Oversized parties go to the smallest listed combination, then the whole room | Proposed | 2026-10-20 |
+| D015 | Order type rule, and which orders count toward spend-per-time metrics | Proposed | 2026-10-20 |
+| D016 | The service-day cutoff is checked against seated orders only | Proposed | 2026-10-20 |
 
 ---
 
@@ -100,3 +105,35 @@ Every time we agree on something, it gets an entry here. Keep this file in the r
 * **Why:** It's closer to how real production pipelines work: only new files get loaded, and there's a record of when each file first came in.
 * **Rejected:** Wiping raw and reloading every file on each run. Simpler, but loses the load history and gets slower as files pile up.
 * **Rejected:** Removing duplicate orders while loading into raw, since that needs a reliable order ID (D008) and would erase what older pulls said.
+
+### D012: Orders are identified by Toast's Order Id; items by Item Selection Id
+* **Status:** Proposed, 2026-10-20 (would answer D008)
+* **Decision:** Every export since 2026-09-30 carries Toast's Order Id, Check Id and Item Selection Id. Staging keeps one row per Order Id and one row per Item Selection Id. The old Opened + Table + # of Guests key is retired.
+* **Why:** _Write this in your own words._
+* **Evidence:** Order Id was unique within every pull checked, and every repeat across pulls was an identical copy from two files sharing a boundary date. The old key collided on about 0.7% of rows (split checks rung in the same minute at the same table).
+* **Rejected:** Keeping the Opened + Table + # of Guests key with an occurrence index (what `legacy/merge_exports.py` does).
+
+### D013: When an order is in two exports, the export whose date range ends latest wins
+* **Status:** Proposed (agreed 2026-10-03; mark Decided once the Why is written)
+* **Decision:** If the same Order Id or Item Selection Id appears in more than one export, staging keeps the copy from the file whose date range (from the Toast file name) ends latest. Files without a dated name rank last; ties fall back to load order.
+* **Why:** _Write this in your own words._
+* **Rejected:** Keeping the copy from the most recently loaded file, because loading an older export later would overwrite newer data.
+
+### D014: Oversized parties go to the smallest listed combination, then the whole room
+* **Status:** Proposed, 2026-10-20 (settles the "which type" question in D007)
+* **Decision:** The floor plan is stored as one row per table per layout period, with start and end dates (old layout until 2025-11-24 for Evangeline and 2026-02-14 for Black Duck). Each order is placed on its own table if the party fits, otherwise on the smallest listed combination that seats it, otherwise the whole room, otherwise flagged `over_capacity`. Nothing is removed.
+* **Why:** _Write this in your own words._
+* **Still open:** The two layout change dates are inferred from the last use of the retired table codes; the owner has confirmed the changes, not the dates. The capacity of the old BD3+BD4+BD5 (set to 7) and Open Lounge setups bigger than the pairs are unconfirmed. See `OPEN_QUESTIONS.md`.
+
+### D015: Order type rule, and which orders count toward spend-per-time metrics
+* **Status:** Proposed, 2026-10-20 (carried over from the legacy analysis)
+* **Decision:** A check with a table is Seated. Without a table, $400 or more is Event-Catering, otherwise To-Go. Per-order VPCPM and TPCPM are only computed for Seated orders with a usable duration of 15 minutes to 6 hours and a believable guest count (30 or fewer, 12 or fewer at the bar).
+* **Why:** _Write this in your own words._
+* **Note:** Untabled event and to-go checks are often rung in the morning, so hour-of-night analysis uses seated trade only.
+
+### D016: The service-day cutoff is checked against seated orders only
+* **Status:** Proposed, 2026-10-20
+* **Decision:** The check that no orders open near the 4 am service-day cutoff looks at seated orders only. Untabled checks in that window are still counted and reported.
+* **Why:** _Write this in your own words._
+* **Evidence:** The only order in the 3-5 am window was an untabled $400 Event-Catering check opened at exactly 3:00 am on 2025-12-20 and paid that afternoon, a back-office entry. No seated order opens between 3 am and 7 am, so the 4 am cutoff stands.
+* **Rejected:** Moving the cutoff, or excluding that one order by hand.

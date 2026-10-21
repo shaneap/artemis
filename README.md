@@ -62,7 +62,7 @@ The turn-gap work was set up to test whether idle time between parties is a reco
 - Gaps **collapse as the room fills** — 65 min when the room is under a quarter full, 24 min when over three quarters. Lingering guests and slow bussing would not behave that way; absence of waiting customers would.
 - **The room never fills.** Zero 15-minute slots in six months had all 17 reservation tables occupied; only 16 slots (about four hours of trading) reached 15 of 17. Median utilization while open is 29%, peaking around 43% on Fri/Sat.
 - **No individual table is chronically bad** — best to worst spans 13 minutes across 17 tables.
-- Honest value of faster turning: **~$9K/yr**, against $156K if you assume every freed minute sells. Turn gaps are only **9.4%** of unsold table time; the other 90.6% is tables that never got a party at all.
+- Honest value of faster turning: **~$9K over those six months** (~$18K/yr; first reported as "$9K/yr", see CHANGELOG 2026-10-20), against $156K if you assume every freed minute sells. Turn gaps are only **9.4%** of unsold table time; the other 90.6% is tables that never got a party at all.
 
 Party-size steering fails the same test — only 1.3% of seatings put a small party at a bigger table while the room was busy enough for it to matter.
 
@@ -82,7 +82,7 @@ It is hand-written prose rather than a generated page, because the narrative is 
 
 | Question | Answer |
 | --- | --- |
-| Seat 2/3-guest parties back to back? | Not where the money is — worth ~$9K/yr, and only if someone is waiting |
+| Seat 2/3-guest parties back to back? | Not where the money is — worth ~$18K/yr (~1% of sales), and only if someone is waiting |
 | Revenue by time of day? | **Answered** — open at 5pm Tue–Thu, close at midnight Tue/Wed/Sun, leave Fri/Sat alone |
 | Value per person per 15 min? | Done — ~$6–8/guest; more usefully, $61/table-hour for a 2-top vs $126 for a 6-top |
 | Are the $1,200 / $900 event rates priced well? | **Yes** — each beats 99% of nights' best 3-hour blocks |

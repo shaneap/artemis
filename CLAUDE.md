@@ -99,7 +99,8 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace legacy/analysis.i
 ## Settled findings (don't re-derive unless data changes)
 
 - Constraint is **demand, not turn speed**: room never full; median utilization 29%; turn gaps
-  shrink as room fills; faster turning worth ~$9K/yr.
+  shrink as room fills; faster turning worth ~$18K/yr (~1% of sales; the old "$9K/yr" was a 6-month total;
+  `report_figures.py` now annualizes it).
 - 81% of 5+ parties fit one physical unit — no floor-plan problem.
 - Event rates $1,200 (BD) / $900 (E) are well priced. E3 should seat 4s; BD1+BD2 seat 5s.
 - Hours: open 5 pm Tue–Thu, close midnight Tue/Wed/Sun, leave Fri/Sat (framed as break-even).
