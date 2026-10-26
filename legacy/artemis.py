@@ -142,6 +142,19 @@ def table_count(section):
 
 
 RESERVATION_TABLE_COUNT = sum(table_count(s) for s in RESERVATION_SECTIONS)
+
+# Evangeline's old layout had two more codes, E4 and E5, until the change the warehouse dates to
+# 2025-11-24 (sql/006_floor_plan.sql). This module keeps no dated floor plan otherwise: E4/E5 are
+# not in SEATING_UNITS, and BD4's orders are dropped, so Black Duck counts 4 codes throughout.
+OLD_EVANGELINE_CODES = ('E4', 'E5')
+EVANGELINE_LAYOUT_CHANGE = pd.Timestamp('2025-11-24')
+
+
+def reservation_table_count(service_date):
+    """Reservation-section table codes on the floor on a service date (17 now, 19 before the
+    Evangeline change). Works on a scalar or a Series of dates."""
+    old = service_date < EVANGELINE_LAYOUT_CHANGE
+    return RESERVATION_TABLE_COUNT + len(OLD_EVANGELINE_CODES) * old
 RESERVATION_UNIT_COUNT = sum(len(section_units(s)) for s in RESERVATION_SECTIONS)
 SECTION_SEATS = {s: section_seats(s) for s in RESERVATION_SECTIONS + ['Bar']}
 
@@ -367,11 +380,51 @@ def verify_service_day_cutoff(df, cutoff_hour=SERVICE_DAY_CUTOFF_HOUR):
     return df[window]
 
 
+def table_stays(df):
+    """One row per (order, table it occupied): the recorded table, plus the partner codes of its
+    seating unit when the party was too big for its code alone.
+
+    Toast rings a party on one code even when it sat at the whole banquette or pushed pair, so
+    counting recorded codes alone shows the partner as free while people sit at it -- which is
+    what made the room look like it never filled. A partner is only borrowed if no other party
+    was rung on it at any point during the stay; if one was, the partner was in separate use and
+    the large party must have sat some other way.
+
+    Only orders with a paid time are included. Returns `Order_Index` (the order's index in
+    `df`), `Table`, `Opened_DT`, `Paid_DT`, `Service_Date`, `Is_Recorded_Table`.
+    """
+    timed = df[df['Paid_DT'].notna() & df['Table'].notna()]
+    own = timed[['Table', 'Service_Date', 'Opened_DT', 'Paid_DT']].assign(
+        Order_Index=timed.index, Is_Recorded_Table=True)
+
+    big = timed[timed['# of Guests'] > timed['Capacity_Max']]
+    borrowed = []
+    for row in big.itertuples():
+        unit = get_unit(row.Table)
+        if unit is None:
+            continue
+        for partner in SEATING_UNITS[unit]['tables']:
+            if partner != row.Table:
+                borrowed.append((partner, row.Service_Date, row.Opened_DT, row.Paid_DT, row.Index, False))
+    borrowed = pd.DataFrame(borrowed, columns=own.columns)
+
+    # Drop a borrowed partner that has its own party overlapping the stay.
+    keys = ['Table', 'Service_Date']
+    pairs = borrowed.reset_index().merge(own, on=keys, suffixes=('', '_own'))
+    clash = pairs[(pairs['Opened_DT_own'] < pairs['Paid_DT'])
+                  & (pairs['Paid_DT_own'] > pairs['Opened_DT'])]['index'].unique()
+    borrowed = borrowed.drop(index=clash)
+
+    return pd.concat([own, borrowed], ignore_index=True)
+
+
 def add_turn_gaps(df):
     """Measure the dead time between one party paying and the next sitting at that table.
 
     This is the number the per-order layer structurally cannot see. For each table, within one
-    service night, `Turn_Gap = next party's Opened - this party's Paid`.
+    service night, `Turn_Gap = next stay's start - this party's Paid`, where the next stay can
+    be a combined party that borrowed the table (see `table_stays`) -- otherwise a partner table
+    looks idle straight through the time people sat at it.
 
     Two data artifacts are guarded:
 
@@ -388,8 +441,11 @@ def add_turn_gaps(df):
     df = df.sort_values(['Table', 'Service_Date', 'Opened_DT']).copy()
     grp = df.groupby(['Table', 'Service_Date'], sort=False)
 
-    next_opened = grp['Opened_DT'].shift(-1)
-    gap = (next_opened - df['Paid_DT']).dt.total_seconds() / 60
+    stays = table_stays(df).sort_values(['Table', 'Service_Date', 'Opened_DT'], kind='stable')
+    stays['Next_Opened'] = stays.groupby(['Table', 'Service_Date'], sort=False)['Opened_DT'].shift(-1)
+    own = stays[stays['Is_Recorded_Table']].set_index('Order_Index')
+    gap = (own['Next_Opened'] - own['Paid_DT']).dt.total_seconds() / 60
+    gap = gap.reindex(df.index)
 
     df['Turn_Overlap'] = gap < 0
     df['Turn_Gap'] = gap.where(gap >= 0)
@@ -406,35 +462,39 @@ def build_occupancy(df, slot_minutes=15, cutoff_hour=SERVICE_DAY_CUTOFF_HOUR):
     when the room is actually busy -- is a query against this frame.
 
     Only seated orders with a plausible duration are included; a check left open overnight
-    would otherwise mark its table occupied for days. Each order's revenue is spread evenly
-    across the slots it occupies (`Slot_Revenue`) so revenue can be read off a clock.
+    would otherwise mark its table occupied for days. A party too big for its code also
+    occupies the partner codes of its banquette or pair (see `table_stays`), so counting
+    tables per slot counts what was really in use. Each order's revenue is spread evenly
+    across the slots it occupies (`Slot_Revenue`), on its recorded table only, so summing
+    revenue never counts a combined party twice.
 
     Returns a long dataframe with `Service_Date`, `Service_DOW`, `Table`, `Section`, `Slot`
     (slot index since the service night began), `Clock_Minutes` (minutes since midnight of the
-    service date, so 1:30am reads as 1530), and `Slot_Revenue`.
+    service date, so 1:30am reads as 1530), `Slot_Revenue` and `Is_Recorded_Table`.
     """
     seated = df[
         (df['Order_Type'] == 'Seated')
         & df['Duration'].between(0, MAX_PLAUSIBLE_SEATING_MINUTES)
     ]
+    stays = table_stays(seated).join(seated[['Service_DOW', 'Amount']], on='Order_Index')
 
     records = []
-    for row in seated.itertuples():
+    for row in stays.itertuples():
         start_min = (row.Opened_DT - row.Service_Date).total_seconds() / 60
         end_min = (row.Paid_DT - row.Service_Date).total_seconds() / 60
         first = int(start_min // slot_minutes)
         last = int(end_min // slot_minutes)
         n_slots = last - first + 1
-        revenue_per_slot = row.Amount / n_slots
+        revenue_per_slot = row.Amount / n_slots if row.Is_Recorded_Table else 0.0
         for slot in range(first, last + 1):
             records.append((
-                row.Service_Date, row.Service_DOW, row.Table, row.Section,
-                slot, slot * slot_minutes, revenue_per_slot,
+                row.Service_Date, row.Service_DOW, row.Table, get_section(row.Table),
+                slot, slot * slot_minutes, revenue_per_slot, row.Is_Recorded_Table,
             ))
 
     occ = pd.DataFrame(records, columns=[
         'Service_Date', 'Service_DOW', 'Table', 'Section',
-        'Slot', 'Clock_Minutes', 'Slot_Revenue',
+        'Slot', 'Clock_Minutes', 'Slot_Revenue', 'Is_Recorded_Table',
     ])
     # Clock_Minutes counts from midnight of the service date, so a 1:30am slot reads as 1530
     # rather than wrapping to 90 -- that keeps late-night slots sorting after evening ones.

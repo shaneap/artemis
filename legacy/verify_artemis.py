@@ -122,19 +122,25 @@ occ = artemis.build_occupancy(seated)
 
 # Occupancy can never exceed the physical floor.
 res_occ = occ[occ['Section'].isin(artemis.RESERVATION_SECTIONS)]
-max_concurrent = res_occ.groupby(['Service_Date', 'Slot'])['Table'].nunique().max()
+concurrent = res_occ.groupby(['Service_Date', 'Slot'])['Table'].nunique().rename('n').reset_index()
+over = concurrent['n'] > artemis.reservation_table_count(concurrent['Service_Date'])
 check('concurrent reservation-section tables never exceeds the real table count',
-      max_concurrent <= artemis.RESERVATION_TABLE_COUNT,
-      f'peak {max_concurrent} of {artemis.RESERVATION_TABLE_COUNT}')
+      not over.any(),
+      f'peak {concurrent["n"].max()} ({over.sum()} slots over the floor plan for their date)')
 
 # The hard one: for a table-night with no overlapping checks, occupied time plus gap time must
 # exactly equal the span from first seating to last payment. If this drifts, the turn-gap
 # reconstruction is wrong somewhere.
+# Table-nights a combined party borrowed are skipped: there the next stay can be a borrowed one,
+# whose time isn't in this table's own Duration.
 res = seated[seated['Section'].isin(artemis.RESERVATION_SECTIONS)]
+stays = artemis.table_stays(seated)
+borrowed = stays[~stays['Is_Recorded_Table']]
+borrowed_nights = set(zip(borrowed['Service_Date'], borrowed['Table']))
 residuals = []
 overlap_nights = 0
-for _, g in res.groupby(['Service_Date', 'Table']):
-    if len(g) < 2:
+for key, g in res.groupby(['Service_Date', 'Table']):
+    if len(g) < 2 or key in borrowed_nights:
         continue
     if g['Turn_Overlap'].any():
         overlap_nights += 1
@@ -147,6 +153,19 @@ check('occupied time + gap time reconciles to the table-night span',
       f'worst residual {worst:.6f} min over {len(residuals)} clean table-nights '
       f'({overlap_nights} skipped for overlapping checks)')
 
+# A combined party borrows its partner only when the partner has no party of its own then, and
+# a party too big for its code does mark the free partner as occupied.
+own = stays[stays['Is_Recorded_Table']]
+pairs = borrowed.merge(own, on=['Service_Date', 'Table'], suffixes=('', '_own'))
+clashes = ((pairs['Opened_DT_own'] < pairs['Paid_DT']) & (pairs['Paid_DT_own'] > pairs['Opened_DT'])).sum()
+check('a borrowed partner table never overlaps a party rung on it', clashes == 0,
+      f'{len(borrowed)} borrowed table-stays, {clashes} clashes')
+too_big = seated[(seated['# of Guests'] > seated['Capacity_Max']) & seated['Seating_Unit'].notna()
+                 & seated['Table'].map(lambda t: len(artemis.SEATING_UNITS.get(artemis.get_unit(t), {}).get('tables', ())) > 1)]
+share = 100 * too_big.index.isin(borrowed['Order_Index']).mean()
+check('most parties too big for their code also occupy the partner', share >= 85,
+      f'{share:.0f}% of {len(too_big)} (the rest found the partner in separate use)')
+
 # Gaps must never be negative or span two different nights.
 gaps = seated['Turn_Gap'].dropna()
 check('no negative turn gaps survive into Turn_Gap', (gaps >= 0).all(),
@@ -155,7 +174,9 @@ check('no negative turn gaps survive into Turn_Gap', (gaps >= 0).all(),
 # The seating units are a claim about physical furniture, and the order data can falsify it:
 # if two codes really share one banquette, then whenever one hosts a party too big to fit its
 # own half, the other must be empty. A pairing that drops below ~85% here is probably wrong.
-occupied_slots = set(zip(occ['Service_Date'], occ['Table'], occ['Slot']))
+# Recorded tables only: borrowed partners are marked occupied by design.
+own_occ = occ[occ['Is_Recorded_Table']]
+occupied_slots = set(zip(own_occ['Service_Date'], own_occ['Table'], own_occ['Slot']))
 worst_unit, worst_rate = None, 100.0
 for unit, spec in artemis.SEATING_UNITS.items():
     if len(spec['tables']) != 2:

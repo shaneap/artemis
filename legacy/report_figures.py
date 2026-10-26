@@ -39,7 +39,6 @@ seated, _ = artemis.apply_duration_floor(raw)
 seated = artemis.add_turn_gaps(seated)
 occ = artemis.build_occupancy(seated)
 res = seated[seated['Section'].isin(artemis.RESERVATION_SECTIONS)].copy()
-NT = artemis.RESERVATION_TABLE_COUNT
 
 heading('MASTHEAD')
 print(f'period          {raw["Service_Date"].min():%-d %B %Y} to {raw["Service_Date"].max():%-d %B %Y}')
@@ -50,12 +49,14 @@ print(f'recorded sales  ${raw["Amount"].sum():,.0f}')
 # How full the room gets -- the claim the whole report rests on.
 room = (occ[occ['Section'].isin(artemis.RESERVATION_SECTIONS)]
         .groupby(['Service_Date', 'Slot'])['Table'].nunique().rename('Tables').reset_index())
-room['Room %'] = 100 * room['Tables'] / NT
+room['Floor'] = artemis.reservation_table_count(room['Service_Date'])
+room['Room %'] = 100 * room['Tables'] / room['Floor']
 
 heading('THE SHORT VERSION')
 print(f'median room fullness while open   {room["Room %"].median():.0f}%')
 print(f'highest ever observed             {room["Room %"].max():.0f}%')
-print(f'15-min slots at full capacity     {(room["Tables"] == NT).sum()}')
+print(f'15-min slots at full capacity     {(room["Tables"] == room["Floor"]).sum()} '
+      f'on {room.loc[room["Tables"] == room["Floor"], "Service_Date"].nunique()} nights')
 
 # Q1 -- turn gaps against room fullness.
 gaps = res[res['Turn_Gap'].notna()].copy()
@@ -69,11 +70,14 @@ print(gaps.groupby(band, observed=True)['Turn_Gap']
           .agg(**{'turns': 'count', 'median gap': 'median'}).round(1).to_string())
 
 achievable = gaps.loc[gaps['Room %'] > 75, 'Turn_Gap'].median()
-blended = res['Amount'].sum() / (res['Duration'].sum() / 15)
+# Revenue per table per 15 min: a combined party's spend is spread over every table it used.
+res_stays = artemis.table_stays(res)
+table_minutes = (res_stays['Paid_DT'] - res_stays['Opened_DT']).dt.total_seconds().sum() / 60
+blended = res['Amount'].sum() / (table_minutes / 15)
 peak = gaps[gaps['Paid_DT'].dt.hour.between(17, 22)]
-naive = (peak['Turn_Gap'] - 15).clip(lower=0).sum() / 15 * blended * 2
+naive = (peak['Turn_Gap'] - 15).clip(lower=0).sum() / 15 * blended
 real = ((peak.loc[peak['Room %'] > 75, 'Turn_Gap'] - achievable).clip(lower=0).sum()
-        / 15 * blended * 2)
+        / 15 * blended)
 # Both sums cover the whole data period; scale to a year for the report.
 years = ((raw['Service_Date'].max() - raw['Service_Date'].min()).days + 1) / 365.25
 print(f'\nreset achieved when busy   {achievable:.0f} min')
@@ -82,9 +86,13 @@ print(f'value, demand-constrained  ${real / years:,.0f}/yr   <- the honest figur
 print(f'value, naive assumption    ${naive / years:,.0f}/yr')
 
 # Q2 -- utilization by night.
+res_stays['Minutes'] = (res_stays['Paid_DT'] - res_stays['Opened_DT']).dt.total_seconds() / 60
 night = res.groupby(['Service_Date', 'Service_DOW']).agg(
-    first=('Opened_DT', 'min'), last=('Paid_DT', 'max'), used=('Duration', 'sum'))
-night['available'] = ((night['last'] - night['first']).dt.total_seconds() / 60) * NT
+    first=('Opened_DT', 'min'), last=('Paid_DT', 'max'))
+night['used'] = res_stays.groupby('Service_Date')['Minutes'].sum().reindex(
+    night.index.get_level_values('Service_Date')).to_numpy()   # borrowed tables included
+night['available'] = (((night['last'] - night['first']).dt.total_seconds() / 60)
+                      * artemis.reservation_table_count(night.index.get_level_values('Service_Date')))
 by_dow = night.groupby('Service_DOW').agg(
     nights=('available', 'count'), available=('available', 'sum'), used=('used', 'sum'))
 by_dow['sold %'] = (100 * by_dow['used'] / by_dow['available']).round(0)
