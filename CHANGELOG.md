@@ -2,6 +2,28 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-26
+
+### Retracted
+- **"The room is never full" / "median utilization 29%" / "the constraint is demand, not turn speed"** (2026-08-06; README, owner report, CLAUDE.md). Occupancy counted only the table code Toast rang a party on. A party at a whole banquette or a pushed-together pair (3,202 parties, about 30% of reservation-section seatings) left its partner table looking empty while people sat at it. Counting every table a party used, the reservation sections are fully occupied in **148 fifteen-minute slots on 71 nights**, all but a handful Fri/Sat (old count: 0). The median slot is **40%** full (old: 28%), Fri/Sat **70%**, and Fri/Sat 8–10 pm **82%**. Counted by the minute, every table is taken at once on 43 nights (37 of 147 Fri/Sat) if a gap of up to 15 minutes between two parties counts as taken; 60 nights at 30 minutes. Midweek is still mostly empty (Tue 25%, Sun 26% of table time used). **Correct finding:** Fri/Sat peaks run at or near capacity on a quarter to a third of weekend nights. The rest of the week is limited by demand. Source: `analysis/results/occupancy.md`.
+- **"Faster turning is worth ~$18K/yr"** (2026-10-20). Two errors. `report_figures.py` multiplied by 2 (the notebook's old six-month `ANNUALIZE = 2.0`) *and* divided by the years in the data, so the 2026-10-20 correction double-annualized: the old method actually gave ~$9K/yr. Separately, the old occupancy put almost no gaps in a busy room (246 gaps over ¾ full, against 3,915 when combined parties count). Re-measured: **~$38K/yr** (~2.4% of ~$1.6M yearly sales) for turning busy-room tables from 5–11 pm as fast as staff already do when it's busy (median 25 min). The legacy pipeline, which only knows the two-table units, gives ~$25K/yr. Turn gaps are 15% of unused table time while open (old: 9%).
+- **"The room was near-full during only 7% of overstays"** (owner report): **28%** with the corrected occupancy (`report_figures.py`).
+
+### Fixed
+- **Occupancy counts every table a party used.** New `analytics.fact_table_occupancy` (`sql/007`): one row per seated party per table occupied. Each party occupies its recorded table plus the other tables of the unit `staging.order_seating` placed it on (combination, whole room, or the largest option when over capacity). A borrowed table counts only if no other party was rung on it during the stay; otherwise it was in separate use. Typo guest counts borrow nothing; 15 min–6 h stays, reservation sections. 5 new tests (41 total).
+- **Legacy pipeline, same rule:** `artemis.table_stays()`. `build_occupancy` now marks borrowed partner codes, with revenue kept on the recorded table so revenue-by-hour and event figures are unchanged. `add_turn_gaps` ends a gap at the next stay on the table, including a combined party that borrowed it. `reservation_table_count(date)` counts 19 codes before the 2025-11-24 Evangeline change (E4/E5) and 17 after; the fixed 17 had made old-layout nights look fuller. `verify_artemis.py`: 20 checks (2 new: borrowed partners never overlap their own party; 95% of oversized parties occupy the partner). The pairing check now reads recorded tables only. The legacy fix covers two-table units only, with no dated floor plan, so warehouse figures are the reference.
+- `report_figures.py`: turn-time value no longer multiplied by 2. Idle time is priced per table (a combined party's spend spread over its tables). Utilization counts borrowed tables against the dated table count.
+
+### Added
+- `analysis/occupancy.py` → `analysis/results/occupancy.md`: tables in use by slot, utilization by night, fully booked nights with a 0/15/30-minute gap allowance, turn gaps by room fullness and the turn-time value, old and new counts side by side.
+
+### Changed
+- **Owner report revised** (private): the short version now describes two businesses (Fri/Sat evenings at or near capacity, the rest of the week demand-limited). Q1 is now "worth it on Friday and Saturday evenings" (~$38K/yr, nearly 90% Fri/Sat; naive $146K). The table-time-sold table, overstay line (28%), E3 caveat, party-size note and "What would help next" are revised, the floor-plan section explains the counting change, and the methods describe the occupancy rule. Occupancy figures come from `analysis/results/occupancy.md`; hours and event figures are unchanged.
+- **Notebook** (`legacy/analysis.ipynb`): the fixed `ANNUALIZE = 2.0` is replaced by the years in the data. Table time is priced and counted per table (borrowed tables included) against the dated table count. The "room never fills" prints and chart titles are gone, the E3/BD/allowance verdicts are computed from the data, and the section conclusions and owner's-answers cells are rewritten with the retraction stated. Re-executed.
+
+### Changed
+- **README condensed** (~20 KB → ~5 KB) and brought up to date. It now leads with the warehouse and a findings table that uses the current answers: decline *and* seasonality, and ~$18K/yr for faster turning. The superseded "decline can't be called" section and the six-month "$9K" figure are gone. Condensed legacy method notes (export merging, seating units, time layer, combined bookings) moved to `legacy/README.md`. The full old README is in git history at `caabc61`.
+
 ## 2026-10-20
 
 ### Retracted

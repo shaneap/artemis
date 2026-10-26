@@ -1,20 +1,20 @@
 # Artemis
 
-Analysis of a bar/restaurant's Toast POS order exports, answering the owner's questions on seating, table turns, event pricing, opening hours and revenue trend.
+Analysis of one bar/restaurant's Toast POS order exports (Ronkonkoma, NY), answering the owner's questions on seating, table turns, event pricing, opening hours and revenue trend. Data: Apr 25, 2025 – Sep 29, 2026.
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
 | [`sql/`](sql/), [`load_raw.py`](load_raw.py), [`docker-compose.yml`](docker-compose.yml) | **PostgreSQL warehouse (current).** Raw exports → typed, de-duplicated staging → analytics facts and dimensions. |
-| [`analysis/`](analysis/) | Analysis scripts on top of the warehouse; results in [`analysis/results/`](analysis/results/). See [analysis/README.md](analysis/README.md). |
+| [`analysis/`](analysis/) | Analysis scripts on the warehouse; results in [`analysis/results/`](analysis/results/). See [analysis/README.md](analysis/README.md). |
 | [`tests/`](tests/) | Warehouse tests (unittest, scratch databases). |
-| [`weather.py`](weather.py) | Daily weather for Ronkonkoma (Open-Meteo), cached; used by both pipelines. |
-| `reports/` | The owner-facing write-up (kept private; not in the repo). |
-| [`legacy/`](legacy/) | The original pandas pipeline and notebook (Jul–Aug 2026), which the report figures come from. |
+| [`weather.py`](weather.py) | Daily Ronkonkoma weather (Open-Meteo), cached; holiday calendar. |
+| [`legacy/`](legacy/) | The original pandas pipeline and notebook (Jul–Aug 2026). See [legacy/README.md](legacy/README.md). |
 | [`docs/`](docs/), [DECISIONS.md](DECISIONS.md), [CHANGELOG.md](CHANGELOG.md) | Export audit, decision log, history. |
+| `reports/` | The owner-facing report (private; not in the repo). |
 
-### Quick start (warehouse)
+## Quick start
 
 ```bash
 pip install -r requirements.txt
@@ -25,197 +25,40 @@ python3 -m unittest tests.test_raw_load tests.test_staging tests.test_analytics
 python3 analysis/trend.py            # likewise hours.py, menu.py
 ```
 
-Toast exports are not tracked; put them in `data/exports/`.
+Toast exports (`OrderDetails`, `ItemSelectionDetails`) are not tracked; put them in `data/exports/`.
 
-## Legacy pandas pipeline
+## Warehouse
 
-The rest of this README describes the original pipeline in [`legacy/`](legacy/). Its shared module is [legacy/artemis.py](legacy/artemis.py); the analysis notebook ([legacy/analysis.ipynb](legacy/analysis.ipynb)) imports it. There are two layers:
+- **raw**: files as received, all text, each load logged by SHA-256.
+- **staging**: one row per Toast ID (where exports overlap, the one whose date range ends latest wins), typed, dated to a **service day** that cuts at 4 am. Also a dated floor plan, and each party placed on its own table, the smallest combination that seats it, or flagged over capacity.
+- **analytics**: `dim_date`, `dim_seating_unit`, `dim_menu_item` (inferred price versions), `fact_order`, `fact_item_selection`, and `fact_table_occupancy` (every table each party occupied, including the partner of a banquette or pair that Toast doesn't record). Aggregation happens in `analysis/`.
 
-- **Per-order layer** — loads per-order exports (guest count, amount, open/close times), derives table duration and two revenue-rate metrics (VPCPM/TPCPM), and visualizes how they trend across party sizes and seating sections.
-- **Time layer** — reconstructs what the floor actually looked like: which tables were occupied in each 15-minute slot, and how long each table sat empty between parties. The per-order layer examines one order at a time and so cannot see a table sitting idle between two healthy-looking checks.
-
-## Status
-
-**Active / exploratory.** The core pipeline (load → clean → section/capacity mapping → VPCPM/TPCPM → shrinkage-weighted section summaries) runs end to end with no known correctness bugs. See [CHANGELOG.md](CHANGELOG.md) for what's been fixed and when.
-
-Run `python3 legacy/verify_artemis.py` to check the pipeline's invariants (row counts, service-day boundary, occupancy bounds, turn-gap reconciliation, seat totals, banquette pairings).
-
-**Known open issues (not yet resolved):**
-- **Multi-table/combined bookings are unrecoverable from Toast exports** — see [Combined bookings & the capacity mismatch](#combined-bookings--the-capacity-mismatch) below. Current mitigation is a flag (`Likely_Combined_Booking`) that splits these rows into a descriptive-only summary; this is a backburner item pending a POS-side or process-level fix, not something fixable in the notebook alone.
-- **95% confidence intervals are paused** pending a proper significance-testing pass on the shrinkage-weighted estimates.
-- **The LOOCV `k`-grid is coarse** (`[1, 2, 3, 5, 8, 12, 20, 30, 50, 75, 100, 150, 200]`) — good enough so far (selected values haven't landed on a grid boundary), but a finer or continuous search would be more rigorous.
-
-## The time layer
-
-Three concepts, all derived from `Opened` + `Duration` — no new data required.
-
-- **Service day** — a Friday that runs to 1:30am counts as Friday. Dating orders by calendar date files late-night revenue under the following day; Friday is still at ~45% table occupancy at midnight, so this materially shifted the day-of-week picture (Friday +86 orders, Sunday −82). It is also why a bar closed on Mondays appeared to have Monday orders. The cutoff is 4am (`SERVICE_DAY_CUTOFF_HOUR`), verified to fall in genuinely dead time — no order in this dataset opens between 3am and 5am.
-- **Turn gap** — the dead time between one party paying and the next being seated at that table, computed within a single service night. Toast records when a party *paid*, not when the table was *cleared*, so a gap conflates guests lingering after settling up, bussing speed, and nobody waiting to be seated. Those have different fixes and this export cannot separate them.
-- **Occupancy timeline** — one row per (night, table, 15-minute slot), with each order's revenue spread evenly across the slots it occupied. This is what utilization and revenue-by-time-of-night are computed from.
-
-Two data artifacts are handled explicitly rather than silently: gaps are never computed across two nights, and ~2% of consecutive same-table pairs *overlap* (the next party appears seated before the previous paid — the combined-check artifact). Overlapping pairs get a null gap and are counted in `Turn_Overlap` so the rate stays visible.
-
-## Key finding: the constraint is demand, not capacity or turn speed
-
-The turn-gap work was set up to test whether idle time between parties is a recoverable lever. **It isn't**, and the evidence is fairly conclusive:
-
-- Gaps **collapse as the room fills** — 65 min when the room is under a quarter full, 24 min when over three quarters. Lingering guests and slow bussing would not behave that way; absence of waiting customers would.
-- **The room never fills.** Zero 15-minute slots in six months had all 17 reservation tables occupied; only 16 slots (about four hours of trading) reached 15 of 17. Median utilization while open is 29%, peaking around 43% on Fri/Sat.
-- **No individual table is chronically bad** — best to worst spans 13 minutes across 17 tables.
-- Honest value of faster turning: **~$9K over those six months** (~$18K/yr; first reported as "$9K/yr", see CHANGELOG 2026-10-20), against $156K if you assume every freed minute sells. Turn gaps are only **9.4%** of unsold table time; the other 90.6% is tables that never got a party at all.
-
-Party-size steering fails the same test — only 1.3% of seatings put a small party at a bigger table while the room was busy enough for it to matter.
-
-Large parties are the most valuable per hour of table time — 15.6% of seatings, **30% of section revenue** — but there is no layout problem to solve: **81% of parties of 5+ fit entirely within a single physical unit**, and 30 of the 46 reservation seats sit in units that take five or more. (An earlier version of this README claimed `E3` was the only such table; that was an artifact of the pre-banquette capacity model and is retracted.)
-
-Separately, parties per night fell from ~26 (Jan/Feb) to ~18 (Jun/Jul) while average party size held steady — a footfall decline, not a mix shift. Whether that is decline or seasonality **cannot be settled from this window** — see [Weather, and why the decline can't be called](#weather-and-why-the-decline-cant-be-called).
-
-## The owner-facing report
-
-The owner report (`reports/owner_report.html`, kept private and not in this repo) is the deliverable — a plain-language write-up for the operator covering their three original questions, the four seating and pricing questions from the bar visit, the opening-hours break-even, and two data asks (last year's Toast export first, Tock second). Open it in a browser, or publish it as an artifact.
-
-It is hand-written prose rather than a generated page, because the narrative is the substance. To keep it from going stale, **`python3 legacy/report_figures.py` recomputes every number the report quotes**, labelled and in the order they appear — drop a newer export into `data/exports/`, run it, and update the figures against the output. Passing a path (`python3 legacy/report_figures.py export.csv`) narrows it to a single raw export instead of the merged dataset.
-
-## The owner's questions
-
-`legacy/analysis.ipynb` closes with a section answering the operator's seven written questions directly. In brief:
+## Findings
 
 | Question | Answer |
 | --- | --- |
-| Seat 2/3-guest parties back to back? | Not where the money is — worth ~$18K/yr (~1% of sales), and only if someone is waiting |
-| Revenue by time of day? | **Answered** — open at 5pm Tue–Thu, close at midnight Tue/Wed/Sun, leave Fri/Sat alone |
-| Value per person per 15 min? | Done — ~$6–8/guest; more usefully, $61/table-hour for a 2-top vs $126 for a 6-top |
-| Are the $1,200 / $900 event rates priced well? | **Yes** — each beats 99% of nights' best 3-hour blocks |
-| Should `E3` seat a 4? | **Yes** — the conflict arises about once every five nights, and those parties still got seated |
-| Should `BD1`+`BD2` seat a 5? | **Yes**, and it already happens — they are one 6-seat banquette |
-| Weight larger parties in 15-min intervals? | Already handled — TPCPM does this by construction; the allowance isn't binding either |
+| How full does the room get? | **Fri/Sat peaks run at or near capacity**: 82% of tables in use at 8–10 pm (median), and every table taken at once on about a quarter of weekend nights. Midweek and Sunday are limited by demand (a quarter to a third of table time used). An earlier "never full" finding was wrong; see CHANGELOG 2026-10-26. |
+| Turn tables faster / seat 2–3s back to back? | Worth ~$38K/yr (~2.4% of sales) if busy-room tables turned as fast as staff already manage when busy (25 min), nearly 90% of it on Fri/Sat evenings. Gaps shrink as the room fills. |
+| Floor plan for large parties? | No problem to solve: 81% of 5+ parties fit one physical unit. |
+| Should `E3` seat a 4? `BD1`+`BD2` a 5? | Yes to both. |
+| $1,200 (Black Duck) / $900 (Evangeline) event rates? | Well priced; each beats 99% of nights' best 3-hour blocks. |
+| Opening hours? | Open 5 pm Tue–Thu; close at midnight Tue/Wed/Sun; leave Fri/Sat alone. A break-even, since the cost of an hour isn't in the data. |
+| Decline or seasonality? | **Both.** Winter is the strong season, but May–Sep 2026 vs 2025 is −10% regular revenue/night and −16% parties. Net of day of week and season, parties are falling 14%/yr (95% CI −19% to −8%). Spend per guest is up 8%, mostly menu mix (like-for-like prices +2%). |
+| Weather? | Rain has no effect. |
 
-Two refinements on event pricing: the midweek premium is much larger than the weekend one (~$830 on a Tuesday vs ~$458 on a Saturday), so midweek discounting is nearly free; and Black Duck's best-ever 3-hour block of $1,440 exceeds the $1,200 rate, so peak weekends are slightly underpriced.
+Current numbers: [analysis/results/](analysis/results/) and `python3 legacy/report_figures.py`.
 
-## Revenue by time of day
+## Metrics and domain notes
 
-Friday and Saturday are a different business from the rest of the week — $7,300–8,100 a night, running past 1am. Tuesday to Thursday take $2,100–3,300 and are finished by 11. Sunday is an afternoon trade: **25% of its takings land between 4 and 6pm**, and it is dead after 11.
+- **VPCPM** = (Amount / guests) / (Duration / 15); **TPCPM** = Amount / (Duration / 15). Seated orders only, 15 min–6 h. Averaged as geometric means, with small party sizes shrunk toward their section's mean (`k` by leave-one-out CV).
+- **Duration** is Toast's `Duration (Opened to Paid)`, never `Closed − Opened` (Closed is a batch close-out).
+- **Order type**: `Seated`, `Event-Catering` (untabled, ≥ $400) or `To-Go`.
+- **Sections**: Black Duck (14 seats), Evangeline (10) and Open Lounge (22) take reservations; the Bar (12) is walk-up. A POS table code is not a physical unit: banquettes and table pairs span two codes (e.g. `BD1`+`BD2` is one 6-seat banquette). The floor plan changed on Nov 24, 2025 (Evangeline) and Feb 14, 2026 (Black Duck).
+- Mondays are closed except for private bookings and are left out of trend and hours work.
 
-Opening hours are framed as a **break-even rather than a recommendation**, since what an hour of trading costs isn't in this data. What each marginal hour *earns* per night:
+## Known limitations
 
-| Night | 4–5pm | 5–6pm | 11pm–12 | 12–1am | Whole night |
-| --- | --- | --- | --- | --- | --- |
-| Tuesday | $46 | $138 | $146 | $20 | $2,154 |
-| Wednesday | $64 | $182 | $217 | $42 | $2,527 |
-| Thursday | $77 | $187 | $350 | $76 | $3,287 |
-| Friday | $169 | $559 | $844 | $494 | $7,318 |
-| Saturday | $403 | $911 | $865 | $612 | $8,149 |
-| Sunday | $289 | $398 | $93 | $11 | $2,735 |
-
-Three changes worth trialling: open at 5pm rather than 4pm Tue–Thu; close at midnight Tue/Wed/Sun; leave Fri/Sat alone.
-
-## Weather, and why the decline can't be called
-
-`weather.py` pulls daily observations for Ronkonkoma from Open-Meteo's historical archive (free, no key) and caches them to `weather_cache.csv`, so the notebook runs offline after the first execution. All 153 trading nights match with no gaps.
-
-**Rain does not matter** — wet Fri/Sat nights average $7,592 against $7,903 dry, inside the noise.
-
-**Temperature appears to matter enormously, and that reading is not safe.** Fri/Sat revenue correlates −0.72 with the daytime high. But over a January-to-July window, elapsed time and temperature correlate at **r = 0.90** — they are very nearly the same variable:
-
-| Model | R² |
-| --- | --- |
-| Time only | 0.858 |
-| Temperature only | 0.861 |
-| Both | 0.861 |
-
-Adding temperature to the time model gains +0.003; adding time to the temperature model gains +0.000. The discriminating test — do hot nights underperform *within* their own month, where time barely moves — is too weak to settle it (pooled r = −0.221 across 51 nights, flipping sign between months).
-
-**So the honest answer is a bound, not a decomposition:** if the fall in trade is entirely seasonal the business is flat; if none of it is, it is losing roughly **$57/night per week elapsed**. Both fit equally well.
-
-**What would settle it:** the same calendar months from the previous year, exported from Toast. Over a full year temperature cycles back down while elapsed time keeps advancing, which breaks the overlap. It is an existing report on a system already in use — no new permission required.
-
-## Order types
-
-Orders are labelled `Seated` / `Event-Catering` / `To-Go`. Previously everything without a table fell through the `Duration >= 15` floor and disappeared — about **$104K** of real revenue (10.7% event/catering, 2.4% to-go), silently. These aren't seated tables so they still don't belong in per-seat metrics, but they're no longer invisible.
-
-The split is by check size (`EVENT_AMOUNT_THRESHOLD`, currently $400), not time of day: untabled orders occur across the whole operating day, but a $2,200 untabled check is a catering booking whatever hour it was rung in. Durations on untabled rows are meaningless — they range up to 18 days — because nobody was sitting anywhere.
-
-## Methodology
-
-- **VPCPM** (Value Per guest, Per 15 Minutes) = `(Amount / # of Guests) / (Duration / 15)`. The core per-seat comparison metric — normalizes for both party size and how long a table was occupied.
-- **TPCPM** (Total revenue Per table, Per 15 Minutes) = `Amount / (Duration / 15)`. Answers the capacity-planning question directly: for a given table, does a full party or a smaller one generate more $/15min?
-- **Duration** comes from Toast's own `Duration (Opened to Paid)` field, not a `Closed - Opened` timestamp diff — the latter is inflated by late/batch POS close-outs and doesn't reflect actual guest turnover.
-- Both metrics are right-skewed, so aggregates are computed on a log scale (`LogVPCPM`/`LogTPCPM`) and back-transformed via `exp` (i.e. geometric mean) for display.
-- **Shrinkage**: low-order-count party sizes get pulled toward their section's overall mean, weighted by a per-section, per-metric `k` selected via leave-one-out cross-validation (LOOCV) — VPCPM and TPCPM each get their own `k`, since they have different skew/variance structures. Party sizes backed by fewer than 10 orders are flagged `Thin Sample` in the summary tables.
-- Analysis is split by **Bar** (walk-up, no reservations — context/reference only) vs. **reservation-relevant sections** (Black Duck, Evangeline, Open Lounge — where the shrinkage/LOOCV treatment and recommendations apply).
-
-## Setup
-
-No virtual environment required — just install the dependencies globally or in whatever environment you normally use:
-
-```bash
-pip install -r requirements.txt
-```
-
-Then launch the notebook:
-
-```bash
-python3 -m jupyter notebook legacy/analysis.ipynb
-```
-
-## Data
-
-Order export CSVs are not tracked in this repo. **Drop each Toast pull into `data/exports/` and leave the previous ones there** — [legacy/merge_exports.py](legacy/merge_exports.py) upserts them into one continuous dataset at `data/orders_merged.csv`, which is what `artemis.load_orders()` reads when called with no argument. Pull a fresh export, re-run the notebook, and the analysis extends; nothing needs editing. Required columns are `Opened`, `Closed`, `Table`, `# of Guests`, `Discount Amount`, `Amount`, `Tip` and `Gratuity`.
-
-```bash
-python3 legacy/merge_exports.py --dry-run  # what a merge would do, without writing
-python3 legacy/merge_exports.py      # rebuild data/orders_merged.csv
-```
-
-Running it by hand is optional — `load_orders()` rebuilds the merged file itself whenever the set of exports on disk has changed. Three properties of real Toast exports shape how the merge works:
-
-- **Exports pulled at different times carry different columns.** The January pull has `Total` and `Duration (Opened to Paid)`; the two earlier ones have `Tax` and no duration. `Total = Amount + Tax + Tip + Gratuity` holds exactly on every overlapping row, so whichever of the pair is missing gets derived. Duration cannot be reconstructed — `Closed` reflects a batch POS close-out, not guest departure — so it stays null, and the merge report names any service days left with no duration data, since those are invisible to the turn-gap and occupancy layers.
-- **Toast amends orders after service.** One 5 June check reads Tip \$23.70 / closed 9:02pm in the May pull, and Tip \$47.38 / closed the following evening in the July one. Deduplicating on row content would keep both and count the order twice, so rows are matched on identity — `Opened`, `Table`, `# of Guests`, none of which Toast revises — and **the newest pull wins, field by field**. A field the newest pull doesn't carry keeps the value an earlier one supplied, which is what protects `Duration` if the report is ever reconfigured without it.
-- **Distinct orders can share an identity.** About 0.7% of rows are split checks rung in the same minute at the same table, up to three deep. Each gets an occurrence index so they survive the merge separately and still match their own earlier versions across pulls.
-
-Pull order is taken from the date range in the filename (`OrderDetails_2026_01_15-2026_07_15.csv`), falling back to file modification time. `legacy/verify_artemis.py` enforces that the merge is lossless: no order appears twice, no export's orders go missing, and revenue on single-source dates is conserved.
-
-## Seating units
-
-**The POS table code is not the physical unit.** Black Duck and Evangeline are banquettes subdivided into two codes each, and most Open Lounge tables pair up. Toast records a whole-banquette booking against one of its codes, so comparing guest count to that code's own capacity makes an ordinary booking look like an overflow. `SEATING_UNITS` in [legacy/artemis.py](legacy/artemis.py) models the real furniture:
-
-| Unit | POS codes | Seats |
-| --- | --- | --- |
-| Black Duck large banquette | `BD3` + `BD5` | 8 |
-| Black Duck small banquette | `BD1` + `BD2` | 6 |
-| Evangeline pair | `E1` + `E2` | 4 |
-| Evangeline large | `E3` | 5-6 |
-| `O1`+`O2` | combo pair | 5 |
-| `O4`+`O5` | combo pair | 4 |
-| `O7`+`O8` | combo pair | 5 |
-| `O9`+`O10` | combo pair | 4 |
-| `O3`, `O6` | never combine | 2 each |
-| Bar | `B1`-`B12` | 1 each |
-
-Section totals: **Open Lounge 22, Black Duck 14, Evangeline 10, Bar 12** — matching the operator's own figures exactly.
-
-The pairings are confirmed against Tock and independently against the order data: when a code hosts a party too large for its own half, its partner is empty 92-100% of the time, versus 20-66% for small parties. Non-adjacent control pairs show no such effect. `legacy/verify_artemis.py` enforces this as an invariant.
-
-`Capacity_Min`/`Capacity_Max` remain per-code as the *solo* range — what a code seats when its partner is in separate use. Notes:
-
-- **Bar**: `B13`/`B14` are standing-wait placeholders (used when a guest is served while waiting for a stool to free up), not physical seats — no capacity, excluded from capacity checks but still counted in Bar revenue.
-- **Black Duck**: `BD5` is **active**, not retired. `BD4` *is* retired; its historical orders are excluded entirely from the notebook.
-- **Open Lounge**: only `O1` and `O8` seat 3. `O10` seats 2 — it reads as a 3-seater in some notes, but Tock says 2 and the data agrees (46% two-guest, 44% four-guest, only 9% threes — the signature of a 2-top that becomes a 4-top with `O9`).
-
-## Combined bookings — mostly resolved
-
-**This was the repo's largest open issue.** The overbooking check previously flagged roughly half of all rows. The cause was measurement, not operations: guest counts were being compared against half a banquette. Against whole-unit capacity:
-
-| Section | Exceeds solo code | Exceeds whole unit |
-| --- | --- | --- |
-| Black Duck | 49% | **9%** |
-| Evangeline | 27% | **7%** |
-| Open Lounge | 27% | **1%** |
-
-(Earlier README versions quoted Black Duck at 60%, computed when `BD1` and `BD5` were modelled as 2-seaters.)
-
-**What remains is genuine.** About 100 reservation-section rows — median 8 guests, up to 18, ~$41K — really do span multiple units. **Root cause, confirmed against Toast's API docs: Toast ties one order to exactly one table.** A check has a single table reference, and combining checks moves items onto one destination check with no record of which others fed in. That is a platform limitation, not an export setting, so the true unit count behind those bookings is unrecoverable after the fact.
-
-`Likely_Combined_Booking` (now `# of Guests > Unit_Capacity`) splits them into a descriptive-only summary so the revenue stays visible without diluting per-seat metrics. The old per-code definition is retained as `Exceeds_Solo_Capacity` so the difference stays measurable. The remaining fix is unchanged in kind but far smaller in scope: a Toast floor-plan combo configuration, or a staff tagging convention at merge time.
-
-**The Bar is a separate case** and still flags ~78% of its rows — a 2-guest check on a 1-seat stool is a routine 2-top, not a multi-unit booking. It is excluded from the combined-booking summary for that reason.
+- **Combined bookings can't be recovered.** Toast ties each order to one table, so ~100 parties (~$41K) that spanned several units can't be placed. They are reported descriptively only; fixing this needs a POS or process change.
+- **Occupancy is inferred for combined parties.** Toast records one table; the partner tables come from the floor plan (the smallest combination that seats the party), and are only counted when no other party was rung on them. Toast doesn't record seating before the first order or lingering after payment, so real occupancy is a little higher than measured.
+- Turn gaps measure payment to next seating, not table clearing, so lingering, bussing and an empty queue can't be told apart. Toast also can't show parties turned away, so demand at full-room moments is unknown.
+- Pending: 95% CIs on the per-section VPCPM/TPCPM summaries; a finer grid for the shrinkage `k`.

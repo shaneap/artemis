@@ -19,10 +19,10 @@ Owner-facing deliverable is `reports/owner_report.html` (gitignored: client-priv
 
 | File | Role |
 | --- | --- |
-| `legacy/artemis.py` | Shared pipeline. Constants (`SEATING_UNITS`, `CAPACITY_RANGES`, `RESERVATION_SECTIONS`, `SERVICE_DAY_CUTOFF_HOUR=4`, `EVENT_AMOUNT_THRESHOLD=400`, `DURATION_FLOOR_MINUTES=15`), `load_orders()`, `classify_order_type`, `apply_duration_floor`, time layer: `add_service_day`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`. Single source of truth — notebook and scripts import it. |
+| `legacy/artemis.py` | Shared pipeline. Constants (`SEATING_UNITS`, `CAPACITY_RANGES`, `RESERVATION_SECTIONS`, `SERVICE_DAY_CUTOFF_HOUR=4`, `EVENT_AMOUNT_THRESHOLD=400`, `DURATION_FLOOR_MINUTES=15`), `load_orders()`, `classify_order_type`, `apply_duration_floor`, time layer: `add_service_day`, `table_stays`, `add_turn_gaps`, `build_occupancy`, `utilization_by_slot`, `reservation_table_count(date)` (19 codes before 2025-11-24, 17 after). Single source of truth — notebook and scripts import it. |
 | `legacy/merge_exports.py` | Upserts every `data/exports/OrderDetails_*.csv` into `data/orders_merged.csv` (+ `.meta.json` manifest). Identity = `Opened`+`Table`+`# of Guests`+occurrence index; newest pull wins field by field. `load_orders()` rebuilds it automatically when stale. |
 | `load_raw.py`, `sql/`, `docker-compose.yml`, `tests/` | The new PostgreSQL warehouse — see **Warehouse** below. |
-| `legacy/verify_artemis.py` | The legacy test suite: 18 invariant checks, PASS/FAIL, nonzero exit on failure. ~1 s. |
+| `legacy/verify_artemis.py` | The legacy test suite: 20 invariant checks, PASS/FAIL, nonzero exit on failure. ~1 s. |
 | `legacy/report_figures.py` | Recomputes every number quoted in `reports/owner_report.html`, in document order. |
 | `weather.py` | Open-Meteo daily archive for Ronkonkoma, cached to `weather_cache.csv`; holiday calendar. Stays at the root: used by `analysis/db.py` and by `legacy/` (which adds the root to `sys.path`). |
 | `legacy/analysis.ipynb` | Narrative analysis: VPCPM/TPCPM by party size & section → turn times & utilization → owner's 7 questions → revenue by time of day / weather. |
@@ -66,7 +66,8 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace legacy/analysis.i
 - **analytics** (`sql/007`, materialized views): `dim_date`, `dim_seating_unit`, `dim_menu_item`
   (price versions inferred from the dominant monthly price of clean Qty-1 sales; identity is the
   item name), `fact_order` (order type, VPCPM/TPCPM per order when seated, 15 min–6 h, real
-  guests), `fact_item_selection`. Aggregation (geometric means, shrinkage) belongs in analysis
+  guests), `fact_item_selection`, `fact_table_occupancy` (party x table occupied, borrowed
+  partner tables included when no other party was rung on them). Aggregation (geometric means, shrinkage) belongs in analysis
   scripts/notebooks on top of these.
 - Net Price is the line total and sums to the order's Amount; Gross Price is a unit price.
 - **Analysis** lives in `analysis/` (see its README): scripts using `analysis/db.py`
@@ -98,9 +99,13 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace legacy/analysis.i
 
 ## Settled findings (don't re-derive unless data changes)
 
-- Constraint is **demand, not turn speed**: room never full; median utilization 29%; turn gaps
-  shrink as room fills; faster turning worth ~$18K/yr (~1% of sales; the old "$9K/yr" was a 6-month total;
-  `report_figures.py` now annualizes it).
+- **Occupancy must count every table a party used** (`analytics.fact_table_occupancy`,
+  `artemis.table_stays`): Toast rings a banquette/pair party on one code, and counting codes alone
+  made the room look never full (retracted 2026-10-26). Corrected: Fri/Sat peaks at or near
+  capacity (8-10 pm median 82% of tables; every table taken on ~1/4 of weekend nights); midweek
+  and Sunday demand-limited (25-34% of table time). Median slot 40%. Turn gaps shrink as room
+  fills; faster turning worth ~$38K/yr (~2.4% of sales; legacy pipeline ~$25K). See
+  `analysis/results/occupancy.md`.
 - 81% of 5+ parties fit one physical unit — no floor-plan problem.
 - Event rates $1,200 (BD) / $900 (E) are well priced. E3 should seat 4s; BD1+BD2 seat 5s.
 - Hours: open 5 pm Tue–Thu, close midnight Tue/Wed/Sun, leave Fri/Sat (framed as break-even).
