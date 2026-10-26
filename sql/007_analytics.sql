@@ -6,12 +6,13 @@
 --   fact_order          one row per order: money, guests, duration, seating, order type,
 --                       and the per-order spend-per-time metrics (VPCPM / TPCPM)
 --   fact_item_selection one row per item selection on a check (D002 grain)
+--   fact_table_occupancy one row per seated party per table it occupied, borrowed tables included
 --
 -- Materialized views, refreshed after every load (load_raw.py runs sql/maintenance/refresh.sql).
 -- Surrogate keys are assigned in a fixed order on each refresh; facts are refreshed after
 -- dims, so keys always agree.
 
-DROP MATERIALIZED VIEW IF EXISTS analytics.fact_item_selection, analytics.fact_order,
+DROP MATERIALIZED VIEW IF EXISTS analytics.fact_table_occupancy, analytics.fact_item_selection, analytics.fact_order,
     analytics.dim_menu_item, analytics.dim_seating_unit, analytics.dim_date;
 
 -- Old pipeline rules, carried over unchanged (artemis.py):
@@ -205,3 +206,67 @@ JOIN analytics.dim_menu_item m
 CREATE UNIQUE INDEX ON analytics.fact_item_selection (item_selection_id);
 CREATE INDEX ON analytics.fact_item_selection (order_id);
 CREATE INDEX ON analytics.fact_item_selection (menu_item_key);
+
+
+-- Which tables each seated party occupied, and when. Toast rings a party on one table code even
+-- when it sat at a banquette or a pushed-together pair, so counting recorded codes alone shows
+-- the partner table as free while people sit at it (it made the room look never full).
+--
+-- Each party occupies its recorded table, plus the other tables of the seating unit
+-- staging.order_seating placed it on (combination, whole room, or the largest option for an
+-- over-capacity party). A borrowed table is claimed only if no other party was rung on it at
+-- any point during the stay: when one was, that table was in separate use, so the large party
+-- must have sat some other way (extra chairs) and the table is left to its own party.
+-- Implausible guest counts (likely typos) borrow nothing.
+--
+-- Same parties as the time metrics: reservation sections, usable duration, 15 min floor.
+-- The stay is Toast's opened-to-paid time, so seating before the first ring and lingering after
+-- paying are not counted; both make real occupancy a little higher than this.
+CREATE MATERIALIZED VIEW analytics.fact_table_occupancy AS
+WITH stays AS (
+    SELECT o.order_id, o.service_date, o.table_code, s.section, s.seating_fit, s.seating_unit,
+           s.guests_implausible,
+           o.opened_at                AS start_at,
+           o.opened_at + o.duration   AS end_at
+    FROM staging.orders o
+    JOIN staging.order_seating s USING (order_id)
+    WHERE s.section IN ('Black Duck', 'Evangeline', 'Open Lounge')
+      AND o.duration_usable
+      AND o.duration_minutes >= analytics.duration_floor_minutes()
+),
+candidates AS (
+    SELECT st.*, t.table_code AS occupied_code
+    FROM stays st
+    CROSS JOIN LATERAL (
+        SELECT st.table_code
+        UNION
+        SELECT unnest(fc.table_codes)
+        FROM staging.floor_plan_combinations fc
+        WHERE fc.combination = st.seating_unit
+          AND NOT st.guests_implausible
+          AND st.service_date >= fc.valid_from
+          AND (fc.valid_to IS NULL OR st.service_date < fc.valid_to)
+    ) t(table_code)
+)
+SELECT
+    c.order_id,
+    to_char(c.service_date, 'YYYYMMDD')::int    AS date_key,
+    c.service_date,
+    c.occupied_code                             AS table_code,
+    c.section,
+    c.occupied_code = c.table_code              AS is_recorded_table,
+    c.seating_fit,
+    c.start_at,
+    c.end_at,
+    round(extract(epoch FROM c.end_at - c.start_at) / 60, 2) AS minutes
+FROM candidates c
+WHERE c.occupied_code = c.table_code
+   OR NOT EXISTS (
+        SELECT 1 FROM stays o2
+        WHERE o2.table_code = c.occupied_code
+          AND o2.service_date = c.service_date
+          AND o2.order_id <> c.order_id
+          AND o2.start_at < c.end_at AND o2.end_at > c.start_at);
+
+CREATE UNIQUE INDEX ON analytics.fact_table_occupancy (order_id, table_code);
+CREATE INDEX ON analytics.fact_table_occupancy (service_date, table_code);

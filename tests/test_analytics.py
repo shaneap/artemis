@@ -93,6 +93,36 @@ class OrderFacts(FileLoading):
             self.assertEqual((f["vpcpm"], f["tpcpm"], f["in_time_metrics"]), (None, None, False), n)
 
 
+class TableOccupancy(FileLoading):
+    def occupied(self, order_id):
+        return sorted(self.conn.execute(
+            "SELECT table_code, is_recorded_table FROM analytics.fact_table_occupancy "
+            "WHERE order_id = %s", (order_id,)).fetchall())
+
+    def test_a_party_too_big_for_its_table_also_occupies_the_partner(self):
+        self.load("orders.csv", HEADER_C,
+                  order_row(order_id="1300000000000000701", table="O1", guests="4"),   # O1 seats 3
+                  order_row(order_id="1300000000000000702", table="O3", guests="2"))   # O3 alone
+        self.assertEqual(self.occupied(1300000000000000701), [("O1", True), ("O2", False)])
+        self.assertEqual(self.occupied(1300000000000000702), [("O3", True)])
+
+    def test_a_partner_in_separate_use_is_not_borrowed(self):
+        self.load("orders.csv", HEADER_C,
+                  order_row(order_id="1300000000000000711", table="O1", guests="4",
+                            opened="1/2/26 7:00 PM", duration="1:00:00"),
+                  order_row(order_id="1300000000000000712", table="O2", guests="2",
+                            opened="1/2/26 7:45 PM", duration="1:00:00"))   # overlaps 7:45-8:00
+        self.assertEqual(self.occupied(1300000000000000711), [("O1", True)])
+        self.assertEqual(self.occupied(1300000000000000712), [("O2", True)])
+
+    def test_typo_guest_counts_borrow_nothing_and_short_visits_are_left_out(self):
+        self.load("orders.csv", HEADER_C,
+                  order_row(order_id="1300000000000000721", table="O1", guests="40"),
+                  order_row(order_id="1300000000000000722", table="O7", guests="4", duration="0:10:00"))
+        self.assertEqual(self.occupied(1300000000000000721), [("O1", True)])
+        self.assertEqual(self.occupied(1300000000000000722), [])
+
+
 @unittest.skipUnless(REAL_EXPORTS, "no exports in data/exports/")
 class AnalyticsOnRealExports(ScratchDB):
     @classmethod
@@ -132,6 +162,22 @@ class AnalyticsOnRealExports(ScratchDB):
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM analytics.fact_order WHERE table_code IS NOT NULL "
             "AND section <> 'Bar' AND seating_unit_key IS NULL"), 0)
+
+    def test_occupancy_has_every_timed_party_on_its_own_table_and_no_double_booking(self):
+        self.assertEqual(self.scalar("""
+            SELECT count(*) FROM analytics.fact_order f
+            WHERE f.section IN ('Black Duck', 'Evangeline', 'Open Lounge') AND f.duration_usable
+              AND f.duration_minutes >= 15
+              AND NOT EXISTS (SELECT 1 FROM analytics.fact_table_occupancy o
+                              WHERE o.order_id = f.order_id AND o.is_recorded_table)"""), 0)
+        # a borrowed table never overlaps a party rung on that table
+        self.assertEqual(self.scalar("""
+            SELECT count(*) FROM analytics.fact_table_occupancy b
+            JOIN analytics.fact_table_occupancy r
+              ON r.table_code = b.table_code AND r.service_date = b.service_date
+             AND r.is_recorded_table AND r.order_id <> b.order_id
+             AND r.start_at < b.end_at AND r.end_at > b.start_at
+            WHERE NOT b.is_recorded_table"""), 0)
 
 
 if __name__ == "__main__":

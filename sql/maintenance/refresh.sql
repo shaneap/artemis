@@ -10,4 +10,5 @@ REFRESH MATERIALIZED VIEW analytics.dim_seating_unit;
 REFRESH MATERIALIZED VIEW analytics.dim_menu_item;
 REFRESH MATERIALIZED VIEW analytics.fact_order;
 REFRESH MATERIALIZED VIEW analytics.fact_item_selection;
+REFRESH MATERIALIZED VIEW analytics.fact_table_occupancy;
 ANALYZE;
