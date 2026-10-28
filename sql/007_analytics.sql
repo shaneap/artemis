@@ -216,7 +216,9 @@ CREATE INDEX ON analytics.fact_item_selection (menu_item_key);
 -- staging.order_seating placed it on (combination, whole room, or the largest option for an
 -- over-capacity party). A borrowed table is claimed only if no other party was rung on it at
 -- any point during the stay: when one was, that table was in separate use, so the large party
--- must have sat some other way (extra chairs) and the table is left to its own party.
+-- must have sat some other way (extra chairs) and the table is left to its own party. Two
+-- parties can't borrow the same table at once either: a listed combination beats a whole-room or
+-- over-capacity guess, then the earlier party keeps it.
 -- Implausible guest counts (likely typos) borrow nothing.
 --
 -- Same parties as the time metrics: reservation sections, usable duration, 15 min floor.
@@ -247,6 +249,18 @@ candidates AS (
           AND st.service_date >= fc.valid_from
           AND (fc.valid_to IS NULL OR st.service_date < fc.valid_to)
     ) t(table_code)
+),
+claims AS (   -- recorded tables, and borrowed tables no party was rung on during the stay
+    SELECT c.*,
+           CASE c.seating_fit WHEN 'combination' THEN 1 WHEN 'whole_room' THEN 2 ELSE 3 END AS fit_rank
+    FROM candidates c
+    WHERE c.occupied_code = c.table_code
+       OR NOT EXISTS (
+            SELECT 1 FROM stays o2
+            WHERE o2.table_code = c.occupied_code
+              AND o2.service_date = c.service_date
+              AND o2.order_id <> c.order_id
+              AND o2.start_at < c.end_at AND o2.end_at > c.start_at)
 )
 SELECT
     c.order_id,
@@ -259,14 +273,16 @@ SELECT
     c.start_at,
     c.end_at,
     round(extract(epoch FROM c.end_at - c.start_at) / 60, 2) AS minutes
-FROM candidates c
+FROM claims c
 WHERE c.occupied_code = c.table_code
-   OR NOT EXISTS (
-        SELECT 1 FROM stays o2
-        WHERE o2.table_code = c.occupied_code
-          AND o2.service_date = c.service_date
-          AND o2.order_id <> c.order_id
-          AND o2.start_at < c.end_at AND o2.end_at > c.start_at);
+   OR NOT EXISTS (   -- another party borrowing the same table at the same time, with priority
+        SELECT 1 FROM claims c2
+        WHERE c2.occupied_code = c.occupied_code
+          AND c2.occupied_code <> c2.table_code
+          AND c2.service_date = c.service_date
+          AND c2.order_id <> c.order_id
+          AND c2.start_at < c.end_at AND c2.end_at > c.start_at
+          AND (c2.fit_rank, c2.start_at, c2.order_id) < (c.fit_rank, c.start_at, c.order_id));
 
 CREATE UNIQUE INDEX ON analytics.fact_table_occupancy (order_id, table_code);
 CREATE INDEX ON analytics.fact_table_occupancy (service_date, table_code);

@@ -115,6 +115,17 @@ class TableOccupancy(FileLoading):
         self.assertEqual(self.occupied(1300000000000000711), [("O1", True)])
         self.assertEqual(self.occupied(1300000000000000712), [("O2", True)])
 
+    def test_two_parties_never_borrow_the_same_table_at_once(self):
+        # current Black Duck: a 10 at BD3 needs the whole room, a 5 at BD2 needs BD1+BD2;
+        # both want BD1, and the listed combination beats the whole-room guess
+        self.load("orders.csv", HEADER_C,
+                  order_row(order_id="1300000000000000731", table="BD3", guests="10",
+                            opened="3/6/26 7:00 PM", duration="2:00:00", closed="3/7/26 4:18 AM"),
+                  order_row(order_id="1300000000000000732", table="BD2", guests="5",
+                            opened="3/6/26 7:30 PM", duration="1:00:00", closed="3/7/26 4:18 AM"))
+        self.assertEqual(self.occupied(1300000000000000731), [("BD3", True), ("BD5", False)])
+        self.assertEqual(self.occupied(1300000000000000732), [("BD1", False), ("BD2", True)])
+
     def test_typo_guest_counts_borrow_nothing_and_short_visits_are_left_out(self):
         self.load("orders.csv", HEADER_C,
                   order_row(order_id="1300000000000000721", table="O1", guests="40"),
@@ -178,6 +189,13 @@ class AnalyticsOnRealExports(ScratchDB):
              AND r.is_recorded_table AND r.order_id <> b.order_id
              AND r.start_at < b.end_at AND r.end_at > b.start_at
             WHERE NOT b.is_recorded_table"""), 0)
+        # and two parties never borrow the same table at the same time
+        self.assertEqual(self.scalar("""
+            SELECT count(*) FROM analytics.fact_table_occupancy a
+            JOIN analytics.fact_table_occupancy b
+              ON a.table_code = b.table_code AND a.service_date = b.service_date
+             AND a.order_id < b.order_id AND a.start_at < b.end_at AND b.start_at < a.end_at
+            WHERE NOT a.is_recorded_table AND NOT b.is_recorded_table"""), 0)
 
 
 if __name__ == "__main__":
