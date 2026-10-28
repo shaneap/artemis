@@ -37,7 +37,7 @@ Toast exports (`OrderDetails`, `ItemSelectionDetails`) are not tracked; put them
 
 | Question | Answer |
 | --- | --- |
-| How full does the room get? | **Fri/Sat peaks run at or near capacity**: 82% of tables in use at 8–10 pm (median), and every table taken at once on about a quarter of weekend nights. Midweek and Sunday are limited by demand (a quarter to a third of table time used). An earlier "never full" finding was wrong; see CHANGELOG 2026-10-26. |
+| How full does the room get? | **Fri/Sat peaks run at or near capacity**: 80% of tables in use at 8–10 pm (median), and every table taken at once on about a quarter of weekend nights. Midweek and Sunday are limited by demand (a quarter to a third of table time used). An earlier "never full" finding was wrong; see CHANGELOG 2026-10-26. |
 | Turn tables faster / seat 2–3s back to back? | Worth ~$38K/yr (~2.4% of sales) if busy-room tables turned as fast as staff already manage when busy (25 min), nearly 90% of it on Fri/Sat evenings. Gaps shrink as the room fills. |
 | Floor plan for large parties? | No problem to solve: 81% of 5+ parties fit one physical unit. |
 | Should `E3` seat a 4? `BD1`+`BD2` a 5? | Yes to both. |

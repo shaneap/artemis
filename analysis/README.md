@@ -11,3 +11,4 @@ latest numbers.
 | `hours.py` | What does each hour of the night earn, by night of the week? (opening hours) |
 | `menu.py` | What sells, why spend per guest rose, and how menu prices changed |
 | `occupancy.py` | How full do the reservation sections get (combined parties occupying every table they used), and what is faster turning worth? |
+| `seating_slack.py` | Fri/Sat 6-10pm: could one more party of 2, 4 or 6 have been seated, as the floor was used, by re-seating the same parties, or not at all? (integer program, SciPy/HiGHS; ~10 min) |

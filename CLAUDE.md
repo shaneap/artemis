@@ -102,8 +102,8 @@ python3 -m jupyter nbconvert --to notebook --execute --inplace legacy/analysis.i
 - **Occupancy must count every table a party used** (`analytics.fact_table_occupancy`,
   `artemis.table_stays`): Toast rings a banquette/pair party on one code, and counting codes alone
   made the room look never full (retracted 2026-10-26). Corrected: Fri/Sat peaks at or near
-  capacity (8-10 pm median 82% of tables; every table taken on ~1/4 of weekend nights); midweek
-  and Sunday demand-limited (25-34% of table time). Median slot 40%. Turn gaps shrink as room
+  capacity (8-10 pm median 80% of tables; every table taken on ~1/4 of weekend nights); midweek
+  and Sunday demand-limited (25-33% of table time). Median slot 39%. Turn gaps shrink as room
   fills; faster turning worth ~$38K/yr (~2.4% of sales; legacy pipeline ~$25K). See
   `analysis/results/occupancy.md`.
 - 81% of 5+ parties fit one physical unit — no floor-plan problem.

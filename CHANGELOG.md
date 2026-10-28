@@ -2,6 +2,20 @@
 
 All notable changes to the Artemis analysis are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 2026-10-28
+
+### Added
+- `analysis/seating_slack.py` → `analysis/results/seating_slack.md`. For each Fri/Sat arrival slot from 6 to 10pm (147 nights), could one more party of 2, 4 or 6, staying the typical weekend-evening time for its size (86 / 102 / 116 min), have been seated? Tested three ways: on the floor as actually used; by re-seating the same parties (actual times and stays) in their own section, via an integer program (SciPy `milp`/HiGHS); and by re-seating across sections. Parties with uncertain placement stay fixed. Each night's actual seating is checked to be a feasible solution (all 147 pass), and 83 re-seat solutions were checked independently for double-bookings (none).
+
+### Findings
+- **Party of 4, 6-10pm arrivals, no reset time:** fits the floor as used in 14% of slots, 34% if the same parties were re-seated within their sections, 74% across sections. In **26% of slots no seating works**: the room was full for a 4. That happens on 79 of 147 weekend nights, for an hour or more on 70, and on about 30% of nights between 7:30 and 9:30pm.
+- **Party of 6:** fits as used in 4% of slots, 6% re-seated within section; **full in 58% of slots**, on 125 of 147 nights. **Party of 2:** 50% as used, 76% re-seated, full in 6%.
+- With a 15-minute reset before and after, a 4 is full in 32% of slots (on 82 nights).
+- **Reading:** assignment costs real capacity for 2s and 4s (within-section re-seating more than doubles the slots a 4 fits). This is hindsight, so a host with no reservations can't capture all of it, but booked parties are known in advance. Where nothing fits, Toast can't show how many parties were turned away; reservation data (Tock) can.
+
+### Fixed
+- **Two parties could borrow the same table at once** in `analytics.fact_table_occupancy` (244 overlapping borrows): a borrowed table was checked against parties rung on it, but not against another party borrowing it. A listed combination now beats a whole-room or over-capacity guess, then the earlier party. Test added (42 total), plus a real-export check that borrowed rows never overlap. Occupancy figures moved slightly: 140 full slots on 69 nights (was 148 on 71), median slot 39% (40%), Fri/Sat 8-10pm 80% (82%), turn-time value ~$38K/yr (unchanged in rounding), naive $151K/yr ($146K). Owner report, README, CLAUDE.md updated.
+
 ## 2026-10-26
 
 ### Retracted
